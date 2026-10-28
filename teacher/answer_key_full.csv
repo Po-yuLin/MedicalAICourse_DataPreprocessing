@@ -1,0 +1,198 @@
+patient_id,column,error_type,clean_value,dirty_value
+P045,ca,missing,0,
+P026,max_hr,missing,158,?
+P279,oldpeak,missing,0,NA
+P214,oldpeak,missing,1,N/A
+P038,ca,missing,1,?
+P170,ca,missing,0,unknown
+P223,resting_bp,missing,94,
+P116,resting_bp,missing,135,unknown
+P272,chol,impossible,228,0
+P258,age,impossible,76,-34
+P227,max_hr,impossible,143,1430
+P163,chol,impossible,214,0
+P178,age,impossible,56,-34
+P262,chol,impossible,319,0
+P255,chol,unit,303,7.84
+P256,chol,unit,209,5.40
+P030,chol,unit,167,4.32
+P170,chol,unit,160,4.14
+P291,chol,unit,212,5.48
+P108,chol,unit,229,5.92
+P024,chol,unit,224,5.79
+P096,chol,unit,255,6.59
+P012,chol,unit,294,7.60
+P239,chol,unit,271,7.01
+P034,max_hr,text_in_number,161,161bpm
+P064,resting_bp,text_in_number,135,135 mmHg
+P095,max_hr,text_in_number,172,172bpm
+P089,resting_bp,text_in_number,138,138 mmHg
+P281,age,text_in_number,57,57y
+P063,resting_bp,text_in_number,128,128 mmHg
+P015,chol,text_in_number,199,199 mg/dL
+P105,max_hr,text_in_number,139,139bpm
+P038,max_hr,text_in_number,112,112bpm
+P169,resting_bp,text_in_number,126,126 mmHg
+P081,sex,category_spelling,male,Male
+P135,sex,category_spelling,female,female 
+P193,sex,category_spelling,male,M
+P098,sex,category_spelling,female,female 
+P140,sex,category_spelling,male,m
+P066,sex,category_spelling,male,M
+P050,sex,category_spelling,male,MALE
+P251,sex,category_spelling,male,m
+P093,sex,category_spelling,male,Male
+P108,sex,category_spelling,male,Male
+P258,sex,category_spelling,female,FEMALE
+P283,sex,category_spelling,female,FEMALE
+P006,sex,category_spelling,male,m
+P215,sex,category_spelling,male,M
+P300,sex,category_spelling,male,M
+P217,sex,category_spelling,female,f
+P196,sex,category_spelling,male,MALE
+P027,sex,category_spelling,female,Female
+P061,sex,category_spelling,female,female 
+P253,sex,category_spelling,male,m
+P226,sex,category_spelling,female,FEMALE
+P100,sex,category_spelling,male, male
+P204,sex,category_spelling,female,F
+P269,sex,category_spelling,male, male
+P278,sex,category_spelling,female,female 
+P083,sex,category_spelling,male,Male
+P221,sex,category_spelling,female,F
+P031,sex,category_spelling,female,f
+P292,sex,category_spelling,female,female 
+P072,sex,category_spelling,male, male
+P060,sex,category_spelling,male,M
+P069,sex,category_spelling,male, male
+P052,sex,category_spelling,male,Male
+P235,sex,category_spelling,female,FEMALE
+P172,sex,category_spelling,male,Male
+P119,sex,category_spelling,male,m
+P166,sex,category_spelling,male,MALE
+P139,sex,category_spelling,male, male
+P188,sex,category_spelling,male,M
+P200,sex,category_spelling,male,M
+P026,chest_pain,category_spelling,nonanginal,non-anginal
+P057,chest_pain,category_spelling,nonanginal,Nonanginal
+P007,chest_pain,category_spelling,asymptomatic,ASYMPTOMATIC
+P130,chest_pain,category_spelling,asymptomatic,ASYMPTOMATIC
+P294,chest_pain,category_spelling,asymptomatic,asymptomatic 
+P061,chest_pain,category_spelling,asymptomatic,asymptomatic 
+P248,chest_pain,category_spelling,asymptomatic,asymptomatic 
+P012,chest_pain,category_spelling,nontypical,Nontypical
+P281,chest_pain,category_spelling,asymptomatic,Asymptomatic
+P042,chest_pain,category_spelling,typical,TYPICAL
+P300,chest_pain,category_spelling,asymptomatic,ASYMPTOMATIC
+P039,chest_pain,category_spelling,asymptomatic,asymptomatic 
+P062,chest_pain,category_spelling,nonanginal,non anginal
+P158,chest_pain,category_spelling,asymptomatic,Asymptomatic
+P231,chest_pain,category_spelling,nonanginal,non anginal
+P188,chest_pain,category_spelling,nontypical,Nontypical
+P060,chest_pain,category_spelling,typical,Typical
+P179,chest_pain,category_spelling,nonanginal,non anginal
+P235,chest_pain,category_spelling,nonanginal,Nonanginal
+P147,chest_pain,category_spelling,asymptomatic,ASYMPTOMATIC
+P197,chest_pain,category_spelling,typical,typical angina
+P094,chest_pain,category_spelling,nonanginal,non anginal
+P016,chest_pain,category_spelling,nonanginal,Nonanginal
+P009,chest_pain,category_spelling,asymptomatic,ASYMPTOMATIC
+P192,chest_pain,category_spelling,asymptomatic,Asymptomatic
+P146,chest_pain,category_spelling,nonanginal,non-anginal
+P139,chest_pain,category_spelling,asymptomatic,Asymptomatic
+P096,chest_pain,category_spelling,asymptomatic,asymptomatic 
+P148,chest_pain,category_spelling,nonanginal,non-anginal
+P058,chest_pain,category_spelling,asymptomatic,ASYMPTOMATIC
+P152,chest_pain,category_spelling,asymptomatic,ASYMPTOMATIC
+P118,chest_pain,category_spelling,asymptomatic,Asymptomatic
+P099,chest_pain,category_spelling,nontypical,Nontypical
+P059,chest_pain,category_spelling,nonanginal,Nonanginal
+P056,chest_pain,category_spelling,asymptomatic,asymptomatic 
+P288,chest_pain,category_spelling,nontypical,atypical
+P069,chest_pain,category_spelling,asymptomatic,asymptomatic 
+P149,chest_pain,category_spelling,nontypical,atypical
+P256,chest_pain,category_spelling,nonanginal,non anginal
+P055,chest_pain,category_spelling,asymptomatic,Asymptomatic
+P180,chest_pain,category_spelling,nonanginal,Nonanginal
+P234,chest_pain,category_spelling,nontypical,Nontypical
+P032,chest_pain,category_spelling,asymptomatic,Asymptomatic
+P022,chest_pain,category_spelling,typical,TYPICAL
+P115,chest_pain,category_spelling,nonanginal,non anginal
+P015,thal,category_spelling,reversible,reversible defect
+P191,thal,category_spelling,normal,NORMAL
+P056,thal,category_spelling,reversible,Reversible
+P141,thal,category_spelling,normal,NORMAL
+P002,thal,category_spelling,normal,Normal
+P114,thal,category_spelling,reversible,reversible defect
+P123,thal,category_spelling,normal,NORMAL
+P034,thal,category_spelling,reversible,Reversible
+P241,thal,category_spelling,normal,NORMAL
+P277,thal,category_spelling,normal,NORMAL
+P133,thal,category_spelling,normal,Normal
+P135,thal,category_spelling,normal,NORMAL
+P222,thal,category_spelling,normal,Normal
+P179,thal,category_spelling,normal,NORMAL
+P132,thal,category_spelling,reversible,Reversible
+P199,thal,category_spelling,normal,Normal
+P006,thal,category_spelling,normal,Normal
+P281,thal,category_spelling,reversible,Reversible
+P090,thal,category_spelling,normal,NORMAL
+P118,thal,category_spelling,normal,NORMAL
+P072,thal,category_spelling,reversible,reversable
+P261,thal,category_spelling,normal,NORMAL
+P136,thal,category_spelling,normal,NORMAL
+P039,thal,category_spelling,reversible,reversible defect
+P189,thal,category_spelling,reversible,reversable
+P080,disease,category_spelling,yes,Yes
+P187,disease,category_spelling,no,0
+P224,disease,category_spelling,yes,Yes
+P278,disease,category_spelling,no,n
+P171,disease,category_spelling,yes,Yes
+P179,disease,category_spelling,no,n
+P256,disease,category_spelling,no,NO
+P066,disease,category_spelling,yes,1
+P034,disease,category_spelling,no,0
+P095,disease,category_spelling,no,NO
+P190,disease,category_spelling,yes,1
+P119,disease,category_spelling,yes,Y
+P141,disease,category_spelling,no,n
+P068,disease,category_spelling,no,No
+P169,disease,category_spelling,yes,Yes
+P162,disease,category_spelling,yes,y
+P084,disease,category_spelling,yes,y
+P157,disease,category_spelling,yes,1
+P208,disease,category_spelling,yes,Yes
+P072,disease,category_spelling,yes,Yes
+P263,disease,category_spelling,no,NO
+P090,disease,category_spelling,no,0
+P134,disease,category_spelling,no,No
+P223,disease,category_spelling,no,NO
+P088,disease,category_spelling,no,n
+P241,disease,category_spelling,no,0
+P191,disease,category_spelling,no,N
+P132,disease,category_spelling,no,N
+P192,disease,category_spelling,yes,Y
+P022,disease,category_spelling,no,N
+P112,disease,category_spelling,yes,1
+P274,disease,category_spelling,no,No
+P014,disease,category_spelling,no,n
+P221,disease,category_spelling,no,n
+P225,disease,category_spelling,yes,Y
+P272,disease,category_spelling,no,0
+P237,disease,category_spelling,yes,Yes
+P008,disease,category_spelling,no,No
+P188,disease,category_spelling,yes,1
+P021,disease,category_spelling,no,0
+P245,disease,category_spelling,no,n
+P019,disease,category_spelling,no,No
+P100,disease,category_spelling,no,0
+P062,disease,category_spelling,no,0
+P227,disease,category_spelling,no,n
+P100,(整列),duplicate,,duplicate row
+P021,(整列),duplicate,,duplicate row
+P201,(整列),duplicate,,duplicate row
+P236,(整列),duplicate,,duplicate row
+P177,(整列),duplicate,,duplicate row
+P177,(整列),duplicate,,duplicate row
+P065,(整列),duplicate,,duplicate row
+P257,(整列),duplicate,,duplicate row

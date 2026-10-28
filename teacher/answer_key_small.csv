@@ -1,0 +1,30 @@
+patient_id,column,error_type,clean_value,dirty_value
+P111,chol,missing,307,
+P268,ca,missing,1,?
+P224,thal,missing,reversible,NA
+P135,resting_bp,missing,122,unknown
+P145,oldpeak,missing,0.6,N/A
+P110,age,impossible,39,520
+P247,resting_bp,impossible,100,0
+P079,chol,impossible,245,0
+P189,max_hr,impossible,195,1950
+P059,chol,unit,273,7.06
+P021,chol,unit,211,5.46
+P078,chol,unit,308,7.96
+P109,resting_bp,text_in_number,120,120 mmHg
+P058,resting_bp,text_in_number,110,110 mmHg
+P145,chol,text_in_number,240,240 mg/dL
+P123,max_hr,text_in_number,143,143bpm
+P135,sex,category_spelling,female,female 
+P167,sex,category_spelling,male,MALE
+P110,sex,category_spelling,male,m
+P009,chest_pain,category_spelling,asymptomatic,ASYMPTOMATIC
+P110,chest_pain,category_spelling,asymptomatic,asymptomatic 
+P153,chest_pain,category_spelling,nonanginal,Nonanginal
+P111,thal,category_spelling,reversible,reversible defect
+P236,thal,category_spelling,normal,NORMAL
+P247,disease,category_spelling,yes,Yes
+P132,disease,category_spelling,no,0
+P109,disease,category_spelling,yes,y
+P210,(整列),duplicate,,duplicate row
+P128,(整列),duplicate,,duplicate row
