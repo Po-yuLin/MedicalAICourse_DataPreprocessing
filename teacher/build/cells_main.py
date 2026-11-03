@@ -46,29 +46,35 @@ print("✅ 你的工作資料夾：", WORKDIR)
 print("   之後所有檔案都會存在這裡，打開 Google 雲端硬碟就看得到。")
 ''')
 code(r'''
-#@title 0-2　備援資料（網路出問題時才會用到，不用展開）
-_EMBEDDED = __EMBEDDED__
-''', form=True)
-code(r'''
-#@title 0-3　載入資料
-BASE_URL = "https://raw.githubusercontent.com/Po-yuLin/MedicalAICourse_DataPreprocessing/v1.0/data/"
+#@title 0-2　載入資料（先從 GitHub 讀；讀不到就改用內嵌的備援資料）
+_EMBEDDED = __EMBEDDED__      # 備援資料（壓縮後的文字），網路或 GitHub 出問題時才會用到
+
+REPO = "Po-yuLin/MedicalAICourse_DataPreprocessing"
+BASE_URLS = [f"https://raw.githubusercontent.com/{REPO}/v1.0/data/",      # 先試固定版本（tag）
+             f"https://raw.githubusercontent.com/{REPO}/main/data/"]       # 再試 main 分支
 
 def load_csv(name):
-    """先從 GitHub 讀；失敗就改用內嵌的備援資料。全部以文字讀入，避免 pandas 偷偷幫你改資料。"""
-    try:
-        with urllib.request.urlopen(BASE_URL + name, timeout=10) as r:
-            text, src = r.read().decode("utf-8"), "GitHub"
-    except Exception:
-        text, src = zlib.decompress(base64.b64decode(_EMBEDDED[name])).decode("utf-8"), "內嵌備援"
+    # 全部以文字讀入，避免 pandas 偷偷幫你改資料（例如把 NA 變成空值）
+    text, src = None, None
+    for base in BASE_URLS:
+        try:
+            with urllib.request.urlopen(base + name, timeout=10) as r:
+                text, src = r.read().decode("utf-8"), "GitHub"
+            break
+        except Exception:
+            continue
+    if text is None:
+        text, src = zlib.decompress(base64.b64decode(_EMBEDDED[name])).decode("utf-8"), "內嵌備援（GitHub 讀不到）"
     print(f"  {name}：從「{src}」載入")
     return pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
 
 df_dirty_small = load_csv("heart_dirty_small.csv")    # 40 位病人：給你手動清理
 df_dirty_full  = load_csv("heart_dirty_full.csv")     # 全部病人：等一下讓程式自動清理
 print(f"\n練習用小資料：{len(df_dirty_small)} 列；完整資料：{len(df_dirty_full)} 列")
-''')
+''', form=True)
+
 code(r'''
-#@title 0-4　工具箱（檢查器、小型 MLP、前處理管線；不用展開）
+#@title 0-3　工具箱（檢查器、小型 MLP、前處理管線；不用展開）
 import torch, torch.nn as nn
 import matplotlib.pyplot as plt
 torch.set_num_threads(2)

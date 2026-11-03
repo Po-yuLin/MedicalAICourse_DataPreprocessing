@@ -21,11 +21,11 @@
 
 ## 上課前（老師）
 1. 把整個資料夾 push 到本 repo（`main` 分支）。
-2. **建立 tag `v1.0`**（notebook 從 `.../v1.0/data/` 讀資料）：
+2. **建立 tag `v1.0`**（notebook 優先從 `.../v1.0/data/` 讀資料）：
    ```bash
    git tag v1.0 && git push origin v1.0
    ```
-   沒有 tag 也不會壞：讀取失敗時會自動改用 notebook 內嵌的備援資料。
+   讀取順序：先試 `v1.0` tag → 再試 `main` → 最後才用 notebook 內嵌的備援資料（會在輸出明確標示「內嵌備援」）。所以沒有 tag 也不會壞。
 3. **務必用學生會用的學校帳號，在真實 Colab 上完整跑一次**，特別是 Google 試算表授權（`gspread`）。若學校帳號限制了 Sheets 授權，把 1-3 的 `MODE` 改成 `"csv"`（下載→編輯→上傳）。
 4. 請學生**課前**先開 notebook、跑完 0-1（Drive 授權），40 人同時授權很容易卡住。
 
