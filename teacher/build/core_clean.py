@@ -1,3 +1,4 @@
+import re
 # ===== 資料字典與規則（檢查器與自動清理共用）=====
 NUM_COLS = ["age", "resting_bp", "chol", "max_hr", "oldpeak", "ca"]          # 連續數值／計數
 BIN_COLS = ["fbs", "exang"]                                                  # 0/1
@@ -17,55 +18,154 @@ def _is_missing(x):
     return pd.isna(x) or str(x).strip().lower() in MISSING_TOKENS
 
 
-def check_cleaned(df, hint=1):
-    """檢查清理後的表格。hint=1 只報數量；2 加上欄位；3 再加上 patient_id。"""
-    issues = []   # (類型, 欄位, patient_id, 說明)
-    d = df.copy()
+def _num(v):
+    try:
+        return float(str(v).strip())
+    except ValueError:
+        return None
+
+
+CODE_ALLOWED = {"fbs": {0, 1}, "exang": {0, 1}, "rest_ecg": {0, 1, 2}, "slope": {1, 2, 3}, "ca": {0, 1, 2, 3}}
+ISSUE_ORDER = ["缺值", "數字欄位混入文字", "不可能的數值", "單位疑似錯誤", "類別寫法不一致", "重複列",
+               "不該改的被改了", "這格有固定答案，但填的不對", "填的值不合理", "誤刪正常的病人", "多出不認識的病人"]
+
+
+def _cell_kind(col, dirty_val, truth_val):
+    """這一格原本是：clean（本來就對）/ fixed（有固定答案）/ fixed_unit（單位換算）/ imputable（缺值或不可能值，沒有唯一答案）"""
+    tv = "" if pd.isna(truth_val) else str(truth_val).strip()
+    if tv == "":
+        return "imputable"
+    dv = "" if pd.isna(dirty_val) else str(dirty_val)
+    if col in ALL_NUMERIC:
+        x = _num(dv)
+        if x is not None and abs(x - float(tv)) < 1e-9:
+            return "clean"
+        m = re.search(r"-?\d+\.?\d*", dv)
+        if x is None and m and not _is_missing(dv) and abs(float(m.group()) - float(tv)) < 1e-9:
+            return "fixed"
+        if col == "chol" and x is not None and 0 < x < 30 and abs(x * 38.67 - float(tv)) <= 2:
+            return "fixed_unit"
+        return "imputable"
+    if dv == tv:
+        return "clean"
+    return "imputable" if _is_missing(dv) else "fixed"
+
+
+def _accept(col, v, kind, truth_val, bands):
+    """學生填的值可不可以接受？有固定答案的要一模一樣；沒有唯一答案的，只要『合理』。"""
+    if kind in ("clean", "fixed", "fixed_unit"):
+        if col in ALL_NUMERIC:
+            x = _num(v)
+            return x is not None and abs(x - float(truth_val)) <= (2 if kind == "fixed_unit" else 1e-9)
+        return str(v) == str(truth_val)
+    if col in ALL_NUMERIC:
+        x = _num(v)
+        if x is None:
+            return False
+        if col in CODE_ALLOWED:
+            return x == int(x) and int(x) in CODE_ALLOWED[col]
+        lo, hi = bands[col]
+        return lo <= x <= hi
+    return str(v) in CAT_COLS[col]
+
+
+def find_issues(df, dirty=None, truth=None, bands=None):
+    """找出表格裡所有問題。只給 df：只做「格式與範圍」檢查。
+    再給 dirty（原始髒資料）、truth（答案）、bands（合理範圍）：還會檢查「不該改的被改了」「有固定答案但填錯」等。"""
+    d = df.reset_index(drop=True)
+    out = []
+    def add(row, pid, col, typ, detail, expected=""):
+        out.append(dict(row=row, patient_id=pid, column=col, type=typ, detail=detail, expected=expected))
     need = ["patient_id"] + ALL_NUMERIC + list(CAT_COLS)
     lost = [c for c in need if c not in d.columns]
     if lost:
-        print(f"❌ 找不到欄位 {lost}。請不要更改標題列（第 1 列）的欄位名稱。")
-        return False
+        return None, lost
     for i, row in d.iterrows():
-        pid = row.get("patient_id", f"第{i+2}列")
+        pid = str(row["patient_id"]).strip()
         for col in ALL_NUMERIC:
             v = row[col]
             if _is_missing(v):
-                issues.append(("缺值", col, pid, "空白或 ?、NA、unknown…"))
+                add(i, pid, col, "缺值", "空白或 ?、NA、unknown…")
                 continue
-            try:
-                x = float(str(v).strip())
-            except ValueError:
-                issues.append(("數字欄位混入文字", col, pid, f"「{v}」不是純數字"))
+            x = _num(v)
+            if x is None:
+                add(i, pid, col, "數字欄位混入文字", f"「{v}」不是純數字")
                 continue
             lo, hi = RANGES[col]
             if col == "chol" and 0 < x < 30:
-                issues.append(("單位疑似錯誤", col, pid, f"{x} 看起來是 mmol/L，要的是 mg/dL"))
+                add(i, pid, col, "單位疑似錯誤", f"{x:g} 看起來是 mmol/L，要的是 mg/dL")
             elif not (lo <= x <= hi):
-                issues.append(("不可能的數值", col, pid, f"{x} 超出合理範圍 {lo}–{hi}"))
+                add(i, pid, col, "不可能的數值", f"{x:g} 超出合理範圍 {lo}–{hi}")
         for col, allowed in CAT_COLS.items():
             v = row[col]
             if _is_missing(v):
-                issues.append(("缺值", col, pid, "空白或 NA…"))
+                add(i, pid, col, "缺值", "空白或 NA…")
             elif str(v) not in allowed:
-                issues.append(("類別寫法不一致", col, pid, f"「{v}」不在 {allowed} 之中"))
-    dup = d[d.duplicated("patient_id", keep="first")]
-    for pid in dup["patient_id"]:
-        issues.append(("重複列", "(整列)", pid, "同一位病人出現不只一次"))
+                add(i, pid, col, "類別寫法不一致", f"「{v}」不在 {allowed} 之中")
+    for i in d.index[d.duplicated("patient_id", keep="first")]:
+        add(i, str(d.at[i, "patient_id"]).strip(), "(整列)", "重複列", "同一位病人出現不只一次")
 
-    if not issues:
-        print(f"✅ 全部通過！共 {len(d)} 列，沒有發現問題。")
+    deleted_info = None
+    if truth is not None and dirty is not None:
+        dirty_ix = dirty.assign(patient_id=dirty["patient_id"].str.strip()).drop_duplicates("patient_id").set_index("patient_id")
+        truth_ix = truth.assign(patient_id=truth["patient_id"].str.strip()).set_index("patient_id")
+        flagged = {(o["row"], o["column"]) for o in out}
+        cols = ALL_NUMERIC + list(CAT_COLS)
+        for i, row in d.iterrows():
+            pid = str(row["patient_id"]).strip()
+            if pid not in truth_ix.index:
+                add(i, pid, "(整列)", "多出不認識的病人", "這個 patient_id 不在原始資料裡")
+                continue
+            for col in cols:
+                if (i, col) in flagged:
+                    continue
+                tv, v = truth_ix.at[pid, col], row[col]
+                kind = _cell_kind(col, dirty_ix.at[pid, col], tv)
+                if _accept(col, v, kind, tv, bands):
+                    continue
+                if kind == "clean":
+                    add(i, pid, col, "不該改的被改了", f"這格原本就是正常的，你把它改成了「{v}」", f"{tv}")
+                elif kind in ("fixed", "fixed_unit"):
+                    add(i, pid, col, "這格有固定答案，但填的不對", f"你填的是「{v}」", f"{tv}")
+                else:
+                    rng = f"{bands[col][0]:g}–{bands[col][1]:g}" if col in bands else "合法的類別"
+                    add(i, pid, col, "填的值不合理", f"你填的是「{v}」，不在合理的範圍內", f"任何落在 {rng} 的值")
+        present = set(d["patient_id"].astype(str).str.strip())
+        gone = [p for p in truth_ix.index if p not in present]
+        n_bad = 0
+        for pid in gone:
+            had_problem = any(_cell_kind(c, dirty_ix.at[pid, c], truth_ix.at[pid, c]) != "clean" for c in cols)
+            if had_problem:
+                n_bad += 1
+            else:
+                add(-1, pid, "(整列)", "誤刪正常的病人", "這位病人的資料原本完全正常，不該刪")
+        deleted_info = (len(gone), n_bad)
+    res = pd.DataFrame(out, columns=["row", "patient_id", "column", "type", "detail", "expected"])
+    return res, deleted_info
+
+
+def check_cleaned(df, hint=1, dirty=None, truth=None, bands=None):
+    """檢查清理後的表格。hint=1 只報數量；2 加上欄位；3 再加上 patient_id；4 連答案都告訴你。"""
+    res, info = find_issues(df, dirty, truth, bands)
+    if res is None:
+        print(f"❌ 找不到欄位 {info}。請不要更改標題列（第 1 列）的欄位名稱。")
+        return False
+    if truth is not None and info and info[0]:
+        print(f"（你刪掉了 {info[0]} 位病人，其中 {info[1]} 位原本就有問題。）")
+    if res.empty:
+        print(f"✅ 全部通過！共 {len(df)} 列，沒有發現問題。")
         return True
-    rep = pd.DataFrame(issues, columns=["類型", "欄位", "patient_id", "說明"])
-    print(f"❌ 還有 {len(rep)} 個問題：")
-    for kind, g in rep.groupby("類型"):
-        print(f"  • {kind}：{len(g)} 個", end="")
+    print(f"❌ 還有 {len(res)} 個問題：")
+    for kind in [k for k in ISSUE_ORDER if k in set(res["type"])]:
+        g = res[res["type"] == kind]
+        line = f"  • {kind}：{len(g)} 個"
         if hint >= 2:
-            print(f"   欄位：{', '.join(sorted(g['欄位'].unique()))}", end="")
-        print()
+            line += f"　欄位：{', '.join(sorted(g['column'].unique()))}"
+        print(line)
         if hint >= 3:
             for _, r in g.iterrows():
-                print(f"      - {r['patient_id']} 的 {r['欄位']}：{r['說明']}")
+                extra = f"　→ 答案：{r['expected']}" if (hint >= 4 and r["expected"]) else ""
+                print(f"      - {r['patient_id']} 的 {r['column']}：{r['detail']}{extra}")
     return False
 
 

@@ -29,7 +29,7 @@ for seed in range(5):
     accs.append(acc)
     print(f"random_state={seed}：測試集準確率 {acc:.1%}　（測試集只有 {len(yte)} 位病人）")
 
-plt.figure(figsize=(5, 2.8)); plt.plot(range(5), accs, "o-"); plt.ylim(0.4, 1)
+plt.figure(figsize=(7.5, 4.2)); plt.plot(range(5), accs, "o-"); plt.ylim(0.4, 1)
 plt.xlabel("random_state (how the data was split)"); plt.ylabel("test accuracy"); plt.tight_layout(); plt.show()
 print(f"\n👉 同一個模型、同一份資料，只是『切法』不同，準確率就從 {min(accs):.0%} 跳到 {max(accs):.0%}。")
 print("   測試集只有 61 個人，多抽到幾個難判斷的病人，成績就差很多。要小心『一次切分的結果』。")
@@ -47,7 +47,8 @@ summary = pd.DataFrame({
     "人數": [len(train_df), len(val_df), len(test_df)],
     "有病比例": [(d["disease"] == "yes").mean() for d in (train_df, val_df, test_df)],
 }, index=["訓練集 train", "驗證集 validation", "測試集 test"])
-display(summary.style.format({"有病比例": "{:.1%}"}))
+summary["有病比例"] = summary["有病比例"].map("{:.1%}".format)
+show(summary, index=True)
 
 test_df.to_csv(os.path.join(WORKDIR, "heart_test_locked.csv"), index=False)
 del test_df
@@ -61,47 +62,94 @@ code(r'''
 #@title 2-3　K 折交叉驗證：資料太少時，讓每一位病人都輪流當一次「驗證」
 K = 5
 Xtv, ytv = to_xy(trainval_df)
-member = np.zeros((K, len(trainval_df)))                 # 0＝這個人這一折在訓練，1＝在驗證
-fold_acc = []
-for k, (tr, va) in enumerate(StratifiedKFold(n_splits=K, shuffle=True, random_state=SEED).split(Xtv, ytv)):
-    member[k, va] = 1
-    model, _ = train_mlp(Xtv[tr], ytv[tr], seed=k)
-    fold_acc.append(evaluate(model, Xtv[va], ytv[va])["acc"])
-    print(f"第 {k+1} 折：訓練 {len(tr)} 人、驗證 {len(va)} 人 → 驗證準確率 {fold_acc[-1]:.1%}")
-print(f"\n平均 {np.mean(fold_acc):.1%} ± {np.std(fold_acc):.1%}（± 是 5 折之間的標準差）")
+folds = list(StratifiedKFold(n_splits=K, shuffle=True, random_state=SEED).split(Xtv, ytv))
 
+# ① 先看「誰在哪一次當驗證」（還沒開始訓練）
+member = np.zeros((K, len(trainval_df)))                 # 0＝這次拿去訓練，1＝這次拿去驗證
+for k, (tr, va) in enumerate(folds):
+    member[k, va] = 1
 from matplotlib.colors import ListedColormap
 order = np.argsort(member.argmax(axis=0))
-plt.figure(figsize=(8, 2.2))
+plt.figure(figsize=(12, 3.8))
 plt.imshow(member[:, order], aspect="auto", cmap=ListedColormap(["#9ecae1", "#de2d26"]), interpolation="nearest")
-plt.yticks(range(K), [f"fold {i+1}" for i in range(K)]); plt.xlabel("patients (blue = train, red = validation)")
+plt.yticks(range(K), [f"round {i+1}" for i in range(K)]); plt.xlabel(f"{len(trainval_df)} patients (blue = train, red = validation)")
 plt.tight_layout(); plt.show()
+print("每一橫列是一次訓練：紅色＝這次拿去『驗證』的病人，藍色＝這次拿去『訓練』的病人。")
+print("每位病人剛好當一次驗證、四次訓練；5 次的驗證成績平均起來，比只切一次可靠。")
+
+# ② 再依序訓練、評分
+fold_acc = []
+for k, (tr, va) in enumerate(folds):
+    model, _ = train_mlp(Xtv[tr], ytv[tr], seed=k)
+    fold_acc.append(evaluate(model, Xtv[va], ytv[va])["acc"])
+    print(f"第 {k+1} 次：訓練 {len(tr)} 人、驗證 {len(va)} 人 → 驗證準確率 {fold_acc[-1]:.1%}")
+print(f"\n平均 {np.mean(fold_acc):.1%} ± {np.std(fold_acc):.1%}（± 是 5 次之間的標準差）")
 print("👉 報告成績時，請報『平均 ± 標準差』，不要只報某一次切分的最好結果。")
 ''')
 md(r'''
 ### ⚠️ 最容易犯、也最難發現的錯：資料洩漏（data leakage）
 
-想像每位病人做了**好幾次檢查**（或一段 EEG 被切成好幾個片段）。如果你把這些「列」隨機打散去切分，**同一位病人就會同時出現在訓練集和測試集**。
-模型不需要真的學會判斷疾病，只要「認得這個人」就能答對。
+想像每位病人做了**好幾次檢查**（或一段 EEG 被切成好幾個片段、一份 MRI 被切成好幾張切片）。資料會長這樣（數值僅為示意）：
+
+| patient_id | 第幾次檢查 | resting_bp | chol | max_hr | disease |
+|---|---|---|---|---|---|
+| P001 | 1 | 145 | 233 | 150 | no |
+| P001 | 2 | 148 | 229 | 153 | no |
+| P001 | 3 | 143 | 236 | 148 | no |
+| P002 | 1 | 160 | 286 | 108 | yes |
+| P002 | 2 | 157 | 291 | 110 | yes |
+| … | … | … | … | … | … |
+
+同一位病人的好幾列，數值**非常接近**，答案（`disease`）也**一模一樣**。
+
+- **如果把這些「列」全部打散再隨機切分**：P001 的第 1、3 次檢查可能進了訓練集，第 2 次進了測試集。模型不需要真的學會判斷疾病，只要「認得 P001 長這樣」就能答對測試題。
+- **正確做法**：先決定「哪些**病人**」當訓練、哪些當測試，再把每位病人的**所有檢查**一起帶走。
+
+### 這個實驗怎麼做
+1. 把我們的 242 位病人，每人複製成 5 列，每列的數值加上約 3% 的隨機誤差（模擬 5 次檢查）→ 共 1210 列。
+2. 用兩種切法，各把資料分成 80% 訓練、20% 測試：
+   - ❌ **A：以「列」切分**——把 1210 列打散後隨機切
+   - ✅ **B：以「病人」切分**——先切病人，再帶走他們全部的列
+3. 兩種切法用**同一個模型、同樣的訓練方式**（刻意用比較大的網路：越大的模型越會「背答案」，洩漏的傷害就越大）。
+4. 比較**測試集**準確率，各做 4 次取平均。
 ''')
 code(r'''
-#@title 2-4　洩漏示範：同一位病人同時出現在訓練與測試
+#@title 2-4　先看資料長怎樣，以及兩種切法把「同一位病人」的檢查分到哪裡
 rng = np.random.default_rng(0)
 
 def make_multi_visit(d, visits=5, jitter=0.03):
-    """假設每位病人檢查了 5 次，每次的數值有一點點測量誤差。"""
+    # 假設每位病人檢查了 5 次，每次的數值有一點點測量誤差
     out = []
-    for _ in range(visits):
-        e = d.copy()
+    for v in range(visits):
+        e = d.copy(); e["visit"] = v + 1
         for c in ["age", "resting_bp", "chol", "max_hr", "oldpeak"]:
-            e[c] = e[c] * rng.normal(1, jitter, len(e))
+            e[c] = (e[c] * rng.normal(1, jitter, len(e))).round(1)
         out.append(e)
     return pd.concat(out, ignore_index=True)
 
 multi = make_multi_visit(trainval_df)
 Xm, ym = to_xy(multi); groups = multi["patient_id"].values
-print(f"{len(trainval_df)} 位病人 × 5 次檢查 = {len(multi)} 列")
+print(f"{len(trainval_df)} 位病人 × 5 次檢查 = {len(multi)} 列。其中兩位病人的資料：")
+two = trainval_df["patient_id"].iloc[:2].tolist()
+show(multi[multi["patient_id"].isin(two)].sort_values(["patient_id", "visit"])
+     [["patient_id", "visit", "age", "resting_bp", "chol", "max_hr", "disease"]])
 
+# 兩種切法（random_state=0）會把每一列分到「訓練」還是「測試」？
+tr_a, te_a = train_test_split(np.arange(len(multi)), test_size=0.2, random_state=0)
+tr_b, te_b = next(GroupShuffleSplit(1, test_size=0.2, random_state=0).split(Xm, ym, groups))
+side = pd.DataFrame({"patient_id": groups, "visit": multi["visit"], "A": "train", "B": "train"})
+side.loc[te_a, "A"] = "test"; side.loc[te_b, "B"] = "test"
+pa = side.pivot(index="patient_id", columns="visit", values="A")
+pb = side.pivot(index="patient_id", columns="visit", values="B")
+split_ids = pa[(pa == "test").any(axis=1) & (pa == "train").any(axis=1)].head(5).index
+pa.columns = pb.columns = [f"第{v}次" for v in pa.columns]
+print("\n❌ A：以『列』切分——同一位病人的 5 次檢查，被拆到訓練與測試兩邊：")
+show(pa.loc[split_ids], index=True)
+print("✅ B：以『病人』切分——同樣這幾位病人，5 次檢查全部在同一邊：")
+show(pb.loc[split_ids], index=True)
+''')
+code(r'''
+#@title 2-5　洩漏實驗：兩種切法，測試準確率差多少？
 def fit_eval(tr, te, seed):
     sc = StandardScaler().fit(Xm[tr])        # 標準化：單元 3 會細講，這裡先用，讓模型學得更好
     model, _ = train_mlp(sc.transform(Xm[tr]), ym[tr], lr=0.01, seed=seed, hidden=(64, 32))
@@ -110,21 +158,21 @@ def fit_eval(tr, te, seed):
 
 acc_row, acc_pat = [], []
 for seed in range(4):
-    tr, te = train_test_split(np.arange(len(multi)), test_size=0.2, random_state=seed)              # ❌ 以「列」切分
+    tr, te = train_test_split(np.arange(len(multi)), test_size=0.2, random_state=seed)              # ❌ A：以「列」切分
     acc_row.append(fit_eval(tr, te, seed))
-    tr, te = next(GroupShuffleSplit(1, test_size=0.2, random_state=seed).split(Xm, ym, groups))     # ✅ 以「病人」切分
+    tr, te = next(GroupShuffleSplit(1, test_size=0.2, random_state=seed).split(Xm, ym, groups))     # ✅ B：以「病人」切分
     acc_pat.append(fit_eval(tr, te, seed))
 
-print(f"\n❌ 以『列』隨機切分（同一位病人跨訓練/測試）：測試準確率 {np.mean(acc_row):.1%}")
-print(f"✅ 以『病人』切分（每位病人只在一邊）　　　：測試準確率 {np.mean(acc_pat):.1%}")
-plt.figure(figsize=(4, 2.8)); plt.bar(["split by row\n(leaky)", "split by patient\n(correct)"], [np.mean(acc_row), np.mean(acc_pat)],
+print(f"❌ A：以『列』隨機切分（同一位病人跨訓練/測試）：測試準確率 {np.mean(acc_row):.1%}")
+print(f"✅ B：以『病人』切分（每位病人只在一邊）　　　：測試準確率 {np.mean(acc_pat):.1%}")
+plt.figure(figsize=(10.5, 6.8)); plt.bar(["A: split by row\n(leaky)", "B: split by patient\n(correct)"], [np.mean(acc_row), np.mean(acc_pat)],
                                       color=["#de2d26", "#3182bd"]); plt.ylim(0.5, 1); plt.ylabel("test accuracy"); plt.tight_layout(); plt.show()
 print("\n👉 好到不真實的成績，要先懷疑『有沒有洩漏』，再開心。")
 ''')
 md(r'''
 **🎓 老師備註（單元 2）**
 - 2-1 的準確率會明顯跳動（小網路、只做粗略縮放，準確率大約 70–90%）：這是刻意的，單元 3 會示範更好的縮放。
-- 2-4 的差距大約是 99％ vs 78％。可以問：「如果這是一篇論文的結果，你會怎麼發現？」→ 看切分單位是病人還是影像／切片。
+- 2-5 的差距大約是 99％ vs 78％。可以問：「如果這是一篇論文的結果，你會怎麼發現？」→ 看切分單位是病人還是影像／切片。
 - 也可提：EEG 的 epoch、MRI 的切片、同一病人的多次住院，都是同樣的結構。
 ''', teacher=True)
 
@@ -143,7 +191,7 @@ code(r'''
 #@title 3-1　標準化：把每個欄位拉到同一把尺上
 cols = ["age", "resting_bp", "chol", "max_hr", "oldpeak", "ca"]
 print("縮放之前，各欄位的『大小』差很多：")
-display(trainval_df[cols].describe().loc[["mean", "std", "min", "max"]].round(1))
+show(trainval_df[cols].describe().loc[["mean", "std", "min", "max"]].round(1), index=True)
 print("膽固醇動輒 200–300，oldpeak 只有 0–6。數值大的欄位會『壓過』數值小的欄位。")
 print("（單元 1、2 的 to_xy 其實偷偷做了『粗略版』：每欄除以一個固定的數字，縮到大約 0–1。現在來比較三種做法。）\n")
 
@@ -155,7 +203,7 @@ def loss_curves(scale):
     return train_mlp(Xtr, ytr, X_val=Xva, y_val=yva)[1]
 
 curves = {"no scaling": loss_curves("none"), "rough (divide by fixed number)": loss_curves("rough"), "standardized": loss_curves("standard")}
-fig, ax = plt.subplots(1, 2, figsize=(10, 3), sharey=True)
+fig, ax = plt.subplots(1, 2, figsize=(15.0, 4.5), sharey=True)
 for a_, key, title in zip(ax, ["train", "val"], ["training loss", "validation loss"]):
     for name, h in curves.items():
         a_.plot(h[key], label=name)
@@ -178,17 +226,17 @@ md(r'''
 code(r'''
 #@title 3-2　類別資料：整數編碼 vs One-hot（之後的實驗都使用標準化）
 print("原始表格：類別是文字")
-display(trainval_df[["patient_id", "chest_pain", "thal"]].head(4))
+show(trainval_df[["patient_id", "chest_pain", "thal"]].head(4))
 
 print("\nOne-hot：每個類別變成一欄 0/1")
 oh = pd.get_dummies(trainval_df[["chest_pain"]]).astype(int)
-display(pd.concat([trainval_df[["patient_id", "chest_pain"]], oh], axis=1).head(4))
+show(pd.concat([trainval_df[["patient_id", "chest_pain"]], oh], axis=1).head(4))
 
 print("\n整數編碼會是 typical=0, nontypical=1, nonanginal=2, asymptomatic=3。")
 print("模型會以為 asymptomatic(3) 是 typical(0) 的『三倍』、nonanginal 在『中間』，但這個順序是我們隨便排的。")
 print("\n各類型實際的有病比例：")
-display((trainval_df.groupby("chest_pain")["disease"].apply(lambda s: (s == "yes").mean())
-         .round(2).to_frame("有病比例")))
+show((trainval_df.groupby("chest_pain")["disease"].apply(lambda s: (s == "yes").mean())
+      .round(2).to_frame("有病比例")), index=True)
 
 print("\n三種做法的比較：")
 _ = cv_eval(trainval_df, "A. numbers only (no text cols)", encode="none")
@@ -202,6 +250,19 @@ md(r'''
 md(r'''
 **🎓 老師備註**：A → B/C 有進步；B vs C 常在雜訊範圍內。可以誠實地說：「在這個小網路與小資料上，one-hot 的好處不大；它真正重要的場景是類別很多（例如 ICD 碼）或線性模型。但**整數編碼會引入不存在的順序，是概念上的錯誤**。」
 ''', teacher=True)
+md(r'''
+### ⚠️ 洩漏（一）：標準化要用「誰」的平均與標準差？
+
+標準化要先算出「平均」和「標準差」。問題是：這兩個數字，是用**哪些人**算的？
+
+| | ❌ 洩漏的做法 | ✅ 正確的做法 |
+|---|---|---|
+| 第 1 步 | 用**全部** 242 人算平均與標準差 | 先分出「訓練折」與「驗證折」 |
+| 第 2 步 | 再把 242 人分成訓練／驗證 | 只用「訓練折」的人算平均與標準差 |
+| 結果 | 驗證的人**早就參與了計算**，他們的資訊「滲」進了訓練 | 驗證的人只是被「套用」這組數字，沒有參與計算 |
+
+（這裡「驗證折」扮演的，就是「之後才會來考試的病人」。）
+''')
 code(r'''
 #@title 3-3　⚠️ 洩漏：「先標準化全部資料、再切分」 vs 「只用訓練集的平均與標準差」
 d = add_male(trainval_df).reset_index(drop=True)
@@ -217,6 +278,23 @@ print(f"❌ 先標準化再切分：accuracy {r['acc'].mean():.3f}   AUC {r['auc
 print(f"✅ 只用訓練集　　：accuracy {proper['acc']:.3f}   AUC {proper['auc']:.3f}")
 print("\n這個資料集上兩者幾乎一樣：因為只是一點點平均值與標準差的資訊『滲』過去。")
 print("但原則不能破：任何『從資料算出來的東西』（平均、標準差、補缺值用的中位數、挑特徵）都只能用訓練資料算。")
+''')
+md(r'''
+### ⚠️ 洩漏（二）：如果被偷看的是「答案」呢？
+
+**設定**：242 位病人，每人有 **300 個純雜訊特徵**（隨機數字，沒有任何意義），標籤（有病／沒病）也是**隨機決定**的。
+所以不管用什麼方法，理論上都只能猜對 **50%**。
+
+**任務**：從 300 個特徵裡，挑出和標籤最相關的 10 個，再用這 10 個特徵訓練模型。
+
+| | ❌ 洩漏的做法 | ✅ 正確的做法 |
+|---|---|---|
+| 怎麼挑特徵 | 用**全部** 242 人（包含之後要驗證的人）的答案來挑 | 只用「訓練折」的人的答案來挑 |
+| 怎麼評分 | 在驗證折的人身上 | 在驗證折的人身上 |
+
+（這裡**沒有動用鎖住的測試集**；「驗證折」扮演「之後才來考試的人」。）
+
+**為什麼洩漏會變準？** 300 個雜訊裡，總會有幾個「碰巧」和答案相關。用全部人的答案去挑，等於偷看考卷，挑出「碰巧對」的特徵；之後驗證時，這些特徵當然「碰巧」又對。
 ''')
 code(r'''
 #@title 3-4　（加碼，時間夠再跑）洩漏有多可怕？用「完全隨機」的資料看看
@@ -266,6 +344,29 @@ plt.tight_layout(); plt.show()
 print("左右翻轉之後，病灶跑到另一側。如果你的任務跟『哪一側』有關（例如左/右側中風），這種擴增會直接把標籤弄錯。")
 print("旋轉一點點、調亮度、加雜訊，通常合理（模擬病人擺位、不同掃描儀）。什麼擴增合理，要由懂臨床的人決定。")
 ''')
+md(r'''
+### 先認識幾個詞：怎麼評量「抓病人」的能力？
+
+假設 100 位病人，其中 15 位有病。模型的預測結果可以分成四格：
+
+| | 實際有病 | 實際沒病 |
+|---|---|---|
+| **預測有病** | TP 真陽性（抓到了） | FP 偽陽性（誤報） |
+| **預測沒病** | FN 偽陰性（**漏診**） | TN 真陰性 |
+
+- **accuracy（準確率）**＝(TP＋TN) ÷ 全部人：全部猜對幾成
+- **recall（召回率／敏感度）**＝TP ÷ (TP＋FN)：**有病的人，抓到幾成**
+- **precision（精確率）**＝TP ÷ (TP＋FP)：**被預測有病的人，真的有病幾成**
+- **AUC**：不看門檻，模型把「有病的人」排在「沒病的人」前面的能力（0.5＝亂猜，1＝完美）
+
+三種訓練方式：
+
+| 名稱 | 做法 |
+|---|---|
+| **plain**（一般訓練） | 什麼都不特別處理。有病的人太少，模型容易偏向猜「沒病」 |
+| **class weight**（類別權重） | 訓練時，漏掉一個「有病」的人，損失乘上約（沒病人數 ÷ 有病人數）倍，逼模型重視少數 |
+| **oversample**（過採樣） | 把「有病」的人**重複抽樣複製**，補到跟沒病的一樣多。只對**訓練集**做，驗證時不做 |
+''')
 code(r'''
 #@title 3-7　資料不平衡：罕見疾病只占一小部分
 pos = trainval_df[trainval_df["disease"] == "yes"]; neg = trainval_df[trainval_df["disease"] == "no"]
@@ -292,20 +393,24 @@ def oof_proba(strategy, repeats=3):
             P[va] += predict_proba(model, Xva) / repeats
     return P
 
-rows = [{"strategy": "always predict 'no disease'", "accuracy": 1 - yi.mean(), "recall": 0.0, "precision": float("nan"), "AUC": 0.5}]
+from sklearn.metrics import confusion_matrix
+n_pos_all, n_neg_all = int(yi.sum()), int((1 - yi).sum())
+rows = [{"strategy": "always predict 'no disease'", "TP": 0, "FN": n_pos_all, "FP": 0, "TN": n_neg_all,
+         "accuracy": 1 - yi.mean(), "recall": 0.0, "precision": float("nan"), "AUC": 0.5}]
 for s in ["plain", "class weight", "oversample"]:
     P = oof_proba(s); pred = (P >= 0.5).astype(int)
-    rows.append({"strategy": s, "accuracy": accuracy_score(yi, pred), "recall": recall_score(yi, pred),
-                 "precision": precision_score(yi, pred, zero_division=0), "AUC": roc_auc_score(yi, P)})
-display(pd.DataFrame(rows).set_index("strategy").round(3))
+    tn, fp, fn, tp = confusion_matrix(yi, pred).ravel()
+    rows.append({"strategy": s, "TP": tp, "FN": fn, "FP": fp, "TN": tn, "accuracy": accuracy_score(yi, pred),
+                 "recall": recall_score(yi, pred), "precision": precision_score(yi, pred, zero_division=0), "AUC": roc_auc_score(yi, P)})
+show(pd.DataFrame(rows).round(3))
 print("👉 『全部猜沒病』的準確率就有 85％，recall（有病的人抓到幾成）卻是 0。罕見疾病不能只看 accuracy。")
 print("   class weight、過採樣可以多抓到一些病人（recall 上升），代價通常是 precision 下降（誤報變多）。要選哪個，取決於漏診與誤報哪個代價更大。")
 ''')
 code(r'''
 #@title 3-8　總結：每一種前處理，到底值多少？
 res = pd.DataFrame(RESULTS)
-display(res.round(3))
-plt.figure(figsize=(7, 3)); plt.barh(res["label"][::-1], res["acc"][::-1], xerr=res["acc_sd"][::-1], color="#3182bd")
+show(res.round(3))
+plt.figure(figsize=(10.5, 4.5)); plt.barh(res["label"][::-1], res["acc"][::-1], xerr=res["acc_sd"][::-1], color="#3182bd")
 plt.xlim(0.5, 1); plt.xlabel("cross-validated accuracy (mean ± sd)"); plt.tight_layout(); plt.show()
 print("標準化的影響最大；加入類別欄位、one-hot 次之；擴增在這裡沒有顯著差異。")
 print("前處理沒有『一定有用』的招式，每一招都要用乾淨的驗證方式檢查。")
@@ -321,21 +426,62 @@ md(r'''
 這表示：所有「從訓練資料算出來的東西」（標準化的平均與標準差、one-hot 的欄位順序、補缺值用的中位數）都要**一起存起來**，跟模型成套使用。
 ''')
 code(r'''
-#@title 4-1　定案：用訓練＋驗證資料建立前處理、訓練最終模型，一起存起來
+#@title 4-1　定案：看看「前處理」到底記住了哪些數字，再訓練並存起來
 import joblib
-fill = {**{c: trainval_df[c].median() for c in ALL_NUMERIC},                  # 補缺值用的數字：只用訓練＋驗證資料算
+d_tv = add_male(trainval_df)
+
+# 補缺值用的數字：只用「訓練＋驗證」資料算
+fill = {**{c: trainval_df[c].median() for c in ALL_NUMERIC},
         **{c: trainval_df[c].mode()[0] for c in ["sex", "chest_pain", "thal"]}}
 
-final_prep = make_prep("onehot", True)
-X_final = final_prep.fit_transform(add_male(trainval_df)).astype("float32")
+# 建立前處理，並且只用「訓練＋驗證」資料 fit（＝讓它記住這些資料的平均、標準差、類別順序）
+final_prep = make_prep("onehot", "standard")
+X_final = final_prep.fit_transform(d_tv).astype("float32")
 y_final = (trainval_df["disease"] == "yes").astype("float32").values
-final_model, _ = train_mlp(X_final, y_final, seed=0)
 
+scaler = final_prep.named_transformers_["num"]
+print("① 標準化記住的數字：每個連續欄位，在訓練資料裡的平均與標準差")
+stats = pd.DataFrame({"欄位": PREP_NUM, "mean 平均": scaler.mean_, "std 標準差": scaler.scale_,
+                      "median 中位數（補缺值用）": [fill[c] for c in PREP_NUM]})
+show(stats.round(2))
+ex = trainval_df["chol"].iloc[0]
+print(f"   例：某位病人的膽固醇 {ex:.0f} → (數值 − 平均) ÷ 標準差 = ({ex:.0f} − {scaler.mean_[2]:.1f}) ÷ {scaler.scale_[2]:.1f} = {(ex - scaler.mean_[2]) / scaler.scale_[2]:.2f}")
+
+print("\n② One-hot 記住的：每個類別欄位有哪些類別、順序是什麼（順序錯了，模型就看錯欄位）")
+oh = final_prep.named_transformers_["onehot"]
+nice = lambda c: [x if isinstance(x, str) else int(x) for x in c]          # 把 0.0 顯示成 0
+show(pd.DataFrame({"欄位": PREP_CAT, "類別（依序展開成 0/1 欄）": [nice(c) for c in oh.categories_]}))
+
+print("\n③ 補缺值用的數字（缺值不能用『新資料自己的中位數』，要用訓練時算好的）：")
+show(pd.DataFrame({"欄位": list(fill), "補上的值": list(fill.values())}).round(2))
+
+print(f"\n④ 前處理後，模型看到的 {X_final.shape[1]} 個欄位（依序）：")
+names = [n.split("__", 1)[1] for n in final_prep.get_feature_names_out()]
+groups, i = [], 0
+groups.append((f"標準化後的連續欄位（{len(PREP_NUM)}）", PREP_NUM)); i += len(PREP_NUM)
+groups.append((f"本來就是 0/1（{len(PREP_BIN)}）", PREP_BIN)); i += len(PREP_BIN)
+for col, cats in zip(PREP_CAT, oh.categories_):
+    groups.append((f"one-hot：{col}（{len(cats)}）", names[i:i + len(cats)])); i += len(cats)
+show(pd.DataFrame({"來源": [g[0] for g in groups], "展開後的欄位（依序）": [", ".join(g[1]) for g in groups]}))
+
+final_model, _ = train_mlp(X_final, y_final, seed=0)
 ART = os.path.join(WORKDIR, "artifacts"); os.makedirs(ART, exist_ok=True)
 joblib.dump({"prep": final_prep, "fill": fill}, os.path.join(ART, "preprocessor.joblib"))
 torch.save(final_model.state_dict(), os.path.join(ART, "model.pt"))
-print("✅ 已存到 Drive：", sorted(os.listdir(ART)))
-print(f"模型輸入維度：{X_final.shape[1]} 個特徵（原始 {len(FEATURES_V1)} 個數字欄位，經過 one-hot 展開後變多了）")
+print("\n✅ 已存到 Drive：", sorted(os.listdir(ART)))
+''')
+code(r'''
+#@title 4-1b　打開剛存的檔案看看：preprocessor.joblib 與 model.pt 裡面是什麼？
+bundle = joblib.load(os.path.join(ART, "preprocessor.joblib"))
+print("preprocessor.joblib 是一個『包裹』，裡面有：", list(bundle.keys()))
+print(f"  • prep：{type(bundle['prep']).__name__}　→ 內含上面的 平均／標準差（①）與 類別順序（②）")
+print(f"  • fill：{type(bundle['fill']).__name__}　→ 補缺值用的 {len(bundle['fill'])} 個數字（③）")
+print("  → 推論時，只要把新病人丟給 prep.transform(...)，就會自動套用『訓練時』記住的一切。")
+
+state = torch.load(os.path.join(ART, "model.pt"))
+show(pd.DataFrame({"層": list(state.keys()), "形狀": [tuple(v.shape) for v in state.values()],
+                   "參數個數": [v.numel() for v in state.values()]}))
+print(f"model.pt 是模型學到的『權重』：總共只有 {sum(v.numel() for v in state.values())} 個數字（這就是整個 AI）。")
 ''')
 code(r'''
 #@title 4-2　🔓 終於打開測試集（只能這一次！）
@@ -386,7 +532,8 @@ risk_resc = float(predict_proba(final_model, X_resc)[0])
 
 table = pd.DataFrame({"做法": ["✅ 正確：套用訓練時存下來的前處理", "❌ A. 跳過標準化", "❌ B. 忘了膽固醇單位換算", "❌ C. 在新資料上重新標準化"],
                       "預測機率": [risk, risk_noscale, risk_unit, risk_resc]})
-display(table.style.format({"預測機率": "{:.1%}"}).hide(axis="index"))
+table["預測機率"] = table["預測機率"].map("{:.1%}".format)
+show(table)
 
 # 錯誤 D：現場用 get_dummies 做 one-hot（新病人只有一位，欄位數、順序都跟訓練時不一樣）
 try:
