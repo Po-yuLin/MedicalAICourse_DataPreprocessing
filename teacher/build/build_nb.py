@@ -53,8 +53,8 @@ def md_tables_to_html(src):
             rows = []
             while i < len(lines) and lines[i].lstrip().startswith("|"):
                 rows.append(lines[i].strip().strip("|").split("|")); i += 1
-            th = "".join(f'<th style="border:1px solid #888;padding:6px 12px;background:#e8eaf6;color:#000;text-align:left">{_inline(c)}</th>' for c in head)
-            body = "".join("<tr>" + "".join(f'<td style="border:1px solid #888;padding:6px 12px;background:#fff;color:#000;text-align:left">{_inline(c)}</td>' for c in r) + "</tr>" for r in rows)
+            th = "".join(f'<th style="border:1px solid #888;padding:6px 12px;background:#e8eaf6;color:#000;text-align:left;white-space:normal;word-break:break-word">{_inline(c)}</th>' for c in head)
+            body = "".join("<tr>" + "".join(f'<td style="border:1px solid #888;padding:6px 12px;background:#fff;color:#000;text-align:left;vertical-align:top;white-space:normal;word-break:break-word;overflow-wrap:anywhere">{_inline(c)}</td>' for c in r) + "</tr>" for r in rows)
             out += ["", f'<table style="font-size:{MD_TABLE_PX}px;border-collapse:collapse;margin:8px 0;max-width:100%"><tr>{th}</tr>{body}</table>', ""]
         else:
             out.append(lines[i]); i += 1
