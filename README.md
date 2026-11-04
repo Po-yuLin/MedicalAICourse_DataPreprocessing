@@ -36,6 +36,7 @@
 - 圖表是 SVG（跟著視窗寬度縮放）；Markdown 裡的表格是 17px 的 HTML 表格（想改大小：`teacher/build/build_nb.py` 的 `MD_TABLE_PX`）。
 
 ## 投影片與圖
+- `slides/qr_github.png` 是指向本 repo 的 QR code（可以直接貼進 PPT）；notebook 開頭自我介紹之後也有一張 QR code 卡片（內嵌，不需要網路）。
 - `slides/intro.png`（自我介紹）、`slides/title.png`（標題頁）是從 `人工智慧的資料前處理基礎.pptx` 匯出的圖片；notebook 開頭的「投影片｜自我介紹」直接讀 GitHub 上的這張圖。**要換圖：把新圖用同樣的檔名放進 `slides/` 即可，不用動 notebook。**
 - 想再加投影片：把圖片放進 `slides/`，在 `teacher/build/cells_main*.py` 加一行 `slide_cell('檔名.png', '標題')`，重新建置。
 - 其他教學圖（特徵與標籤、缺值、神經網路、洩漏三種、標準化、K 折／LOO／LOPO、不平衡、隱私）是用程式畫的 SVG（`teacher/build/core_figs.py`），已預先放好輸出，打開 notebook 就看得到，不用先執行。

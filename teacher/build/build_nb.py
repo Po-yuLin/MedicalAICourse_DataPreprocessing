@@ -69,12 +69,24 @@ tbl = "| patient_id | 欄位 | 類型 | 髒值 | 原本的值 |\n|---|---|---|--
     f"| {r.patient_id} | {r.column} | {r.error_type} | `{r.dirty_value}` | `{r.clean_value}` |" for r in key.fillna("").itertuples())
 ANSWER = "**🎓 老師備註：小資料集（40 位）的注入錯誤完整答案**（另外 P088 的 thal、P167 的 ca 是資料集本來就缺）\n\n" + tbl
 
+QR_URL = "https://github.com/Po-yuLin/MedicalAICourse_DataPreprocessing"
+_qr_svg = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "qr_repo.svg"), encoding="utf-8").read()
+QR_HTML = ('<div style="display:flex;align-items:center;gap:32px;flex-wrap:wrap;background:#fff;color:#111;padding:22px 30px;'
+           'border-radius:14px;border:3px solid #2563eb;max-width:900px;font-family:sans-serif">'
+           f'<div style="width:290px;max-width:100%;flex:none">{_qr_svg}</div>'
+           '<div style="flex:1;min-width:280px"><div style="font-size:30px;font-weight:700">📲 掃描 QR code，前往課程頁面</div>'
+           '<div style="font-size:20px;margin:12px 0">程式（notebook）、資料、投影片圖片都在這裡</div>'
+           f'<div style="font-size:22px"><a href="{QR_URL}" style="color:#1d4ed8">github.com/Po-yuLin/MedicalAICourse_DataPreprocessing</a></div>'
+           '<div style="font-size:18px;color:#374151;margin-top:12px">頁面上的「Open in Colab」按鈕，可以直接開啟學生版 notebook</div></div></div>')
+QR_SRC = "#@title 二維碼｜課程 GitHub 頁面\nfrom IPython.display import HTML, display\ndisplay(HTML(" + repr(QR_HTML) + "))"
 _figns = {}
 exec(core["figs"], _figns)
 REPO_NAME = "Po-yuLin/MedicalAICourse_DataPreprocessing"
 
 def _prefilled_output(fl):
-    if fl.get("fig"):
+    if fl.get("qr"):
+        html = QR_HTML
+    elif fl.get("fig"):
         html = _figns["FIGS"][fl["fig"]]()
     else:
         url = f"https://raw.githubusercontent.com/{REPO_NAME}/main/slides/{fl['slide']}"
@@ -89,14 +101,14 @@ def build(teacher, path):
     for typ, src, fl in CELLS:
         if fl["teacher"] and not teacher:
             continue
-        src = fill(src)
+        src = QR_SRC if fl.get("qr") else fill(src)
         if typ == "md":
             nb.cells.append(nbf.v4.new_markdown_cell(md_tables_to_html(src)))
         else:
             c = nbf.v4.new_code_cell(src)
             if fl.get("form"):
                 c.metadata["cellView"] = "form"
-            if fl.get("fig") or fl.get("slide"):
+            if fl.get("fig") or fl.get("slide") or fl.get("qr"):
                 c.outputs = [_prefilled_output(fl)]
             nb.cells.append(c)
         if teacher and "完整答案：`teacher/answer_key_small.csv`" in src:

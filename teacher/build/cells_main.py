@@ -29,6 +29,7 @@ md(r'''
 ''')
 
 slide_cell('intro.png', '自我介紹')
+CELLS.append(("code", "__QR_CELL__", dict(form=True, teacher=False, qr=True)))
 
 # ============================== 單元 0 ==============================
 md('## 單元 0｜準備環境')

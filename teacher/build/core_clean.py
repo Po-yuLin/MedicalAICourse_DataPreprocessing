@@ -62,6 +62,9 @@ def _accept(col, v, kind, truth_val, bands):
         x = _num(v)
         if x is None:
             return False
+        tv = "" if pd.isna(truth_val) else str(truth_val).strip()
+        if tv != "" and abs(x - float(tv)) < 1e-9:      # 把「打錯的值」還原成原本正確的值（例如 1950 → 195），一定算對
+            return True
         if col in CODE_ALLOWED:
             return x == int(x) and int(x) in CODE_ALLOWED[col]
         lo, hi = bands[col]
