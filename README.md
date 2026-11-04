@@ -30,9 +30,15 @@
 4. 請學生**課前**先開 notebook、跑完 0-1（Drive 授權），40 人同時授權很容易卡住。
 
 ## 投影與字體大小
-- notebook 第一格有 `FONT_PX = 20`：**表格與文字輸出**的字體大小，想再大就改這個數字（例如 26）再重新執行。圖表字體也會跟著調整。
-- Markdown 說明文字與程式碼的字體 **notebook 本身無法放大**，請用瀏覽器縮放（`Ctrl` ＋ `+`，建議 125–150%）；Colab 的「工具 → 設定 → 編輯器」可放大程式碼字體。
-- Markdown 裡的表格已改成 HTML 大字表格（22px）；若要更大，改 `teacher/build/build_nb.py` 的 `MD_TABLE_PX` 後重新建置。
+- 建議**把瀏覽器放大到 150%**（`Ctrl` ＋ `+`）來放大所有文字；Colab 的「工具 → 設定 → 編輯器」可放大程式碼字體。
+- **表格會自動縮小去配合視窗寬度**（Colab 內會偵測目前的瀏覽器寬度），所以放大到 150% 也不會超出螢幕。換了縮放比例後，重新執行該格即可。
+- notebook 第一格的 `FONT_PX = 16` 是表格與文字輸出的**最大**字體；想更大就調高。
+- 圖表是 SVG（跟著視窗寬度縮放）；Markdown 裡的表格是 17px 的 HTML 表格（想改大小：`teacher/build/build_nb.py` 的 `MD_TABLE_PX`）。
+
+## 投影片與圖
+- `slides/intro.png`（自我介紹）、`slides/title.png`（標題頁）是從 `人工智慧的資料前處理基礎.pptx` 匯出的圖片；notebook 開頭的「投影片｜自我介紹」直接讀 GitHub 上的這張圖。**要換圖：把新圖用同樣的檔名放進 `slides/` 即可，不用動 notebook。**
+- 想再加投影片：把圖片放進 `slides/`，在 `teacher/build/cells_main*.py` 加一行 `slide_cell('檔名.png', '標題')`，重新建置。
+- 其他教學圖（特徵與標籤、缺值、神經網路、洩漏三種、標準化、K 折／LOO／LOPO、不平衡、隱私）是用程式畫的 SVG（`teacher/build/core_figs.py`），已預先放好輸出，打開 notebook 就看得到，不用先執行。
 
 ## 檢查器怎麼判斷學生清得對不對
 檢查器內嵌了 40 位病人的「標準答案」與各欄位的「合理範圍」（p1–p99），所以會分辨三種格子：
@@ -44,6 +50,7 @@
 ## 資料夾
 ```
 notebooks/   學生版、老師版 .ipynb（由 teacher/build 產生，請勿直接手改）
+slides/      投影片圖片（自我介紹、標題）
 data/        heart_dirty_small.csv（40 位練習用）、heart_dirty_full.csv（303 位＋重複列）
 teacher/     answer_key_*.csv（注入錯誤的完整答案）、heart_clean_original.csv（乾淨原始資料）、
              make_dirty_data.py（重新產生髒資料；固定 seed）、build/（重新產生 notebook）

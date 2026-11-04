@@ -15,15 +15,28 @@ md(r'''
 | **驗證集 validation** | 模擬考 | 比較不同做法、調整設定 | 很多次（但用越多，越會偏向它） |
 | **測試集 test** | **正式考試** | 最後給模型一個誠實的成績 | **只有一次** |
 ''')
+md(r'''
+### 什麼是「隨機種子」（random seed）？
+
+電腦的「隨機」其實是**算出來的**，就像**洗撲克牌**：「怎麼起手洗牌」就是**種子**。
+
+| 種子 | 結果 |
+|---|---|
+| **同一個種子** | 每次洗出一模一樣的牌序 → 切出來的訓練／測試資料也一模一樣（別人可以**重現**你的結果） |
+| **換一個種子** | 洗出另一種牌序 → 切出來的人不同，成績也跟著不同 |
+
+程式裡，切分資料的種子叫 `random_state`，訓練模型的叫 `seed`。
+''')
 code(r'''
 #@title 2-1　隨機切成「訓練 80％／測試 20％」，換 5 個隨機種子看看
 if "df_clean" not in globals():                 # 保險：沒跑單元 1 也能繼續
     df_clean = auto_clean(df_dirty_full)
 X_all, y_all = to_xy(df_clean)
 
+TEST_SIZE = 0.2        # 👈 試試看：改成 0.5、0.9 再重新執行，成績會怎麼變？（test_size＝拿多少比例當測試集）
 accs = []
 for seed in range(5):
-    Xtr, Xte, ytr, yte = train_test_split(X_all, y_all, test_size=0.2, random_state=seed)
+    Xtr, Xte, ytr, yte = train_test_split(X_all, y_all, test_size=TEST_SIZE, random_state=seed)
     model, _ = train_mlp(Xtr, ytr)
     acc = evaluate(model, Xte, yte)["acc"]
     accs.append(acc)
@@ -32,7 +45,20 @@ for seed in range(5):
 plt.figure(figsize=(7.5, 4.2)); plt.plot(range(5), accs, "o-"); plt.ylim(0.4, 1)
 plt.xlabel("random_state (how the data was split)"); plt.ylabel("test accuracy"); plt.tight_layout(); plt.show()
 print(f"\n👉 同一個模型、同一份資料，只是『切法』不同，準確率就從 {min(accs):.0%} 跳到 {max(accs):.0%}。")
-print("   測試集只有 61 個人，多抽到幾個難判斷的病人，成績就差很多。要小心『一次切分的結果』。")
+print(f"   測試集只有 {len(yte)} 個人，多抽到幾個難判斷的病人，成績就差很多。要小心『一次切分的結果』。")
+print("\n👉 請試試看：把上面的 TEST_SIZE 改成 0.5、0.9，再重新執行。測試集變大、訓練集變小，成績會有什麼不同？為什麼？")
+''')
+md(r'''
+**🎓 提醒（2-1 互動）**
+- 叫出右側的 **Gemini**，請它「逐行解釋這段程式」，帶學生看懂 `train_test_split`、`test_size`、`random_state`。
+- 示範把 `TEST_SIZE` 改成 **0.9**：訓練只剩約 30 人，模型學得少，成績下降。您實測約 70%；我這邊（5 個 seed）約 74–79%，差異來自模型初始化等細節，**以您現場看到的為準**。
+- 順便讓學生把 `range(5)` 的種子換掉，看「同一份資料、不同切法」的波動。
+''', teacher=True)
+md(r'''
+### stratify（分層）是什麼？
+
+**stratify**＝切分時，讓**每一份**資料裡「有病／沒病」的比例，都跟全體差不多。
+資料少、或疾病罕見時，如果單純隨機切，**運氣不好**就可能出現「測試集裡幾乎沒有病人」。下面的 `stratify=` 就是在做這件事。
 ''')
 code(r'''
 #@title 2-2　切成 訓練／驗證／測試 三份，並把「測試集」鎖起來
@@ -59,7 +85,35 @@ model, _ = train_mlp(Xtr, ytr)
 print(f"\n用訓練集學習，在驗證集上的準確率：{evaluate(model, Xva, yva)['acc']:.1%}")
 ''')
 code(r'''
-#@title 2-3　K 折交叉驗證：資料太少時，讓每一位病人都輪流當一次「驗證」
+#@title 2-3　如果「不 stratify」會怎樣？（故意把切分弄得不平均）
+# ① 隨機切 20 次，看測試集裡「有病的比例」會晃多大
+rates = {}
+for use_strat in (False, True):
+    r = []
+    for seed in range(20):
+        _, te = train_test_split(df_clean, test_size=0.2, random_state=seed, stratify=(is_yes if use_strat else None))
+        r.append((te["disease"] == "yes").mean())
+    rates[use_strat] = r
+show(pd.DataFrame({"切法": ["不 stratify", "stratify"],
+                   "測試集有病比例：最低": [f"{min(rates[False]):.1%}", f"{min(rates[True]):.1%}"],
+                   "最高": [f"{max(rates[False]):.1%}", f"{max(rates[True]):.1%}"]}))
+print(f"全體的有病比例是 {is_yes.mean():.1%}。不 stratify：每次切出來的測試集，有病比例都不一樣。")
+
+# ② 更極端：先依 disease 排序（沒病的在前、有病的在後），再「不洗牌」直接切前 80%／後 20%
+srt = df_clean.sort_values("disease").reset_index(drop=True)
+tr_bad, te_bad = train_test_split(srt, test_size=0.2, shuffle=False)
+tr_ok, te_ok = train_test_split(srt, test_size=0.2, random_state=0, stratify=srt["disease"] == "yes")
+rows = []
+for name, tr_, te_ in [("❌ 排序後直接切（不洗牌、不 stratify）", tr_bad, te_bad), ("✅ 洗牌並 stratify", tr_ok, te_ok)]:
+    Xa, ya = to_xy(tr_); Xb, yb = to_xy(te_)
+    model, _ = train_mlp(Xa, ya)
+    rows.append({"切法": name, "訓練集有病比例": f"{(tr_['disease'] == 'yes').mean():.0%}",
+                 "測試集有病比例": f"{(te_['disease'] == 'yes').mean():.0%}", "測試準確率": f"{evaluate(model, Xb, yb)['acc']:.1%}"})
+show(pd.DataFrame(rows))
+print("👉 左邊的測試集『全部都是病人』，訓練集的病人卻只有三成：模型沒學到該學的分布，這個準確率也無法反映它在真實世界的表現。")
+''')
+code(r'''
+#@title 2-4　K 折交叉驗證：資料太少時，讓每一位病人都輪流當一次「驗證」
 K = 5
 Xtv, ytv = to_xy(trainval_df)
 folds = list(StratifiedKFold(n_splits=K, shuffle=True, random_state=SEED).split(Xtv, ytv))
@@ -87,7 +141,47 @@ print(f"\n平均 {np.mean(fold_acc):.1%} ± {np.std(fold_acc):.1%}（± 是 5 �
 print("👉 報告成績時，請報『平均 ± 標準差』，不要只報某一次切分的最好結果。")
 ''')
 md(r'''
-### ⚠️ 最容易犯、也最難發現的錯：資料洩漏（data leakage）
+### 其他「輪流當驗證」的方式
+
+| 方法 | 做法 | 訓練幾次 | 適合 |
+|---|---|---|---|
+| **K 折（K-fold）** | 切成 K 份，輪流 1 份當驗證 | K 次 | 最常用，K 通常取 5 或 10 |
+| **Leave-one-out（LOO，留一法）** | 每次只留 **1 個樣本**當驗證，其餘全部訓練 | N 次（N＝樣本數） | 資料**非常少**時；但很慢，而且每次驗證只有 1 筆，成績較不穩定 |
+| **Leave-one-patient-out（LOPO，留一病人法）** | 每次留 **1 位病人**（的**所有**列）當驗證 | N 次（N＝病人數） | **一位病人有多筆資料**（多次檢查、多張切片）時，必須用這種「以病人分組」的切法，否則會洩漏（見下一節） |
+''')
+fig('splits', 'K 折、LOO、LOPO 的差別')
+code(r'''
+#@title 2-5　Leave-one-out 要訓練幾次？
+from sklearn.model_selection import LeaveOneOut
+loo = LeaveOneOut()
+n_fits = loo.get_n_splits(Xtv)
+t0 = time.time(); train_mlp(Xtv, ytv); one_fit = time.time() - t0
+print(f"{len(Xtv)} 位病人 → Leave-one-out 要訓練 {n_fits} 次（K 折只要 5 次）。")
+print(f"訓練一次約 {one_fit:.2f} 秒 → 全部約 {n_fits * one_fit / 60:.1f} 分鐘；而且每次的驗證集只有 1 個人。")
+tr0, va0 = next(loo.split(Xtv))
+print(f"第 1 次：訓練 {len(tr0)} 人、驗證 {len(va0)} 人（就是 trainval_df 的第 {va0[0] + 1} 位病人）。")
+
+RUN_LOO = False        # 👈 想真的跑一遍（約 1 分鐘）就改成 True
+if RUN_LOO:
+    hits = []
+    for k, (tr, va) in enumerate(loo.split(Xtv)):
+        model, _ = train_mlp(Xtv[tr], ytv[tr], seed=k)
+        hits.append(float(((predict_proba(model, Xtv[va]) >= 0.5) == ytv[va]).all()))
+    print(f"Leave-one-out 準確率：{np.mean(hits):.1%}")
+''')
+md(r'''
+### ⚠️ 資料洩漏（data leakage）：模型「偷看了答案」
+
+模型在訓練時，**不小心拿到了「測試時不該知道的資訊」**，成績就會好到不真實。最常見的三種：
+''')
+fig('leak_patient', '洩漏①：病人層級')
+fig('leak_preproc', '洩漏②：前處理')
+fig('leak_feature', '洩漏③：特徵')
+md(r'''
+下面先動手做第 ① 種（病人層級）；第 ② 種在單元 3 的標準化之後做；第 ③ 種請記得：**特徵一定要是「預測當下」就拿得到的資訊**。
+''')
+md(r'''
+### ① 病人層級洩漏：動手做做看
 
 想像每位病人做了**好幾次檢查**（或一段 EEG 被切成好幾個片段、一份 MRI 被切成好幾張切片）。資料會長這樣（數值僅為示意）：
 
@@ -114,7 +208,7 @@ md(r'''
 4. 比較**測試集**準確率，各做 4 次取平均。
 ''')
 code(r'''
-#@title 2-4　先看資料長怎樣，以及兩種切法把「同一位病人」的檢查分到哪裡
+#@title 2-6　先看資料長怎樣，以及兩種切法把「同一位病人」的檢查分到哪裡
 rng = np.random.default_rng(0)
 
 def make_multi_visit(d, visits=5, jitter=0.03):
@@ -149,7 +243,20 @@ print("✅ B：以『病人』切分——同樣這幾位病人，5 次檢查全
 show(pb.loc[split_ids], index=True)
 ''')
 code(r'''
-#@title 2-5　洩漏實驗：兩種切法，測試準確率差多少？
+#@title 2-7　Leave-one-patient-out：每次把「一位病人的全部檢查」留下來驗證
+from sklearn.model_selection import LeaveOneGroupOut
+logo = LeaveOneGroupOut()
+n_splits = logo.get_n_splits(groups=groups)
+tr, te = next(logo.split(Xm, ym, groups))
+held = multi.iloc[te][["patient_id", "visit"]]
+print(f"{len(trainval_df)} 位病人（共 {len(multi)} 列）→ Leave-one-patient-out 要訓練 {n_splits} 次。")
+print("第 1 次被留下來驗證的，是這位病人的『全部』檢查：")
+show(held)
+print(f"訓練集裡還找得到這位病人嗎？　{held['patient_id'].iloc[0] in set(multi.iloc[tr]['patient_id'])}")
+print("👉 這樣，模型就不可能靠『認得這個人』來答題。")
+''')
+code(r'''
+#@title 2-8　洩漏實驗：兩種切法，測試準確率差多少？
 def fit_eval(tr, te, seed):
     sc = StandardScaler().fit(Xm[tr])        # 標準化：單元 3 會細講，這裡先用，讓模型學得更好
     model, _ = train_mlp(sc.transform(Xm[tr]), ym[tr], lr=0.01, seed=seed, hidden=(64, 32))
@@ -172,7 +279,7 @@ print("\n👉 好到不真實的成績，要先懷疑『有沒有洩漏』，再
 md(r'''
 **🎓 老師備註（單元 2）**
 - 2-1 的準確率會明顯跳動（小網路、只做粗略縮放，準確率大約 70–90%）：這是刻意的，單元 3 會示範更好的縮放。
-- 2-5 的差距大約是 99％ vs 78％。可以問：「如果這是一篇論文的結果，你會怎麼發現？」→ 看切分單位是病人還是影像／切片。
+- 2-8 的差距大約是 99％ vs 78％。可以問：「如果這是一篇論文的結果，你會怎麼發現？」→ 看切分單位是病人還是影像／切片。
 - 也可提：EEG 的 epoch、MRI 的切片、同一病人的多次住院，都是同樣的結構。
 ''', teacher=True)
 
@@ -187,8 +294,84 @@ md(r'''
 
 我們用的網路超小：**輸入 → 3 個感知器 → 1 個感知器，總共 4 個**（約 70 個參數）。資料只有 300 筆，網路大了只會背答案。
 ''')
+md(r'''
+### 為什麼要標準化（正規化）？
+
+想像兩個特徵：**體重（約 40–120 kg）**與**血鉀（約 3.5–5.5 mmol/L）**。
+數字大的變數，在模型眼中「聲音比較大」。我們不講公式，只講：**把大家拉到同一把尺**。
+
+「聲音大」為什麼會出問題？因為神經網路是靠**梯度**來調整參數的：**輸入越大，梯度越大，參數一次被「推」得越多**。
+下面用**一個感知器**（ReLU）親手算一遍：把 loss 傳回去，看參數會被更新多少。
+''')
+fig('scale', '標準化：把大家拉到同一把尺')
+fig('chain', '一個感知器：往前算、把 loss 傳回去')
 code(r'''
-#@title 3-1　標準化：把每個欄位拉到同一把尺上
+#@title 3-1　動手算：一個感知器，把 loss 傳回去，看參數被更新多少
+# 👈 可以改改看這些數字！
+x  = [85, 4.6]       # 輸入：體重 85 kg、血鉀 4.6 mmol/L
+w  = [0.1, 0.1]      # 兩個權重（一個對體重、一個對血鉀）
+b  = 0.0             # 偏差
+t  = 1.0             # 正確答案（希望模型輸出的值）
+lr = 0.01            # 學習率：每次更新「走多大一步」
+
+x, w = np.array(x, float), np.array(w, float)
+# 【往前算】
+z = (w * x).sum() + b                    # 加權總和
+y = max(z, 0.0)                          # ReLU：負的變 0
+loss = (y - t) ** 2                      # loss：和正確答案差多少（平方）
+# 【把 loss 傳回去：連鎖律】
+dL_dy = 2 * (y - t)                      # loss 對 y 的微分
+dy_dz = 1.0 if z > 0 else 0.0            # ReLU 的微分：z>0 是 1，否則 0
+dz_dw = x                                # z 對每個 w 的微分，就是對應的輸入 x
+grad_w = dL_dy * dy_dz * dz_dw           # 三個相乘＝loss 對每個 w 的梯度
+grad_b = dL_dy * dy_dz
+
+print("【往前算】")
+print(f"  z = w₁x₁ + w₂x₂ + b = {w[0]}×{x[0]:g} + {w[1]}×{x[1]:g} + {b} = {z:.3f}")
+print(f"  y = ReLU(z) = max({z:.3f}, 0) = {y:.3f}")
+print(f"  loss = (y − t)² = ({y:.3f} − {t:g})² = {loss:.3f}")
+print("【把 loss 傳回去（連鎖律）】")
+print(f"  ∂L/∂y = 2(y − t) = {dL_dy:.3f}")
+print(f"  ∂y/∂z = {dy_dz:.0f}　（ReLU：z>0 → 1，否則 0）")
+print(f"  ∂z/∂w₁ = x₁ = {x[0]:g}　　∂z/∂w₂ = x₂ = {x[1]:g}")
+print(f"  ∂L/∂w₁ = {dL_dy:.3f} × {dy_dz:.0f} × {x[0]:g} = {grad_w[0]:.3f}")
+print(f"  ∂L/∂w₂ = {dL_dy:.3f} × {dy_dz:.0f} × {x[1]:g} = {grad_w[1]:.3f}")
+print("【更新】新的 w ＝ 舊的 w − 學習率 × 梯度")
+print(f"  w₁（體重）：{w[0]} → {w[0] - lr * grad_w[0]:.3f}　（改變 {-lr * grad_w[0]:+.3f}）")
+print(f"  w₂（血鉀）：{w[1]} → {w[1] - lr * grad_w[1]:.3f}　（改變 {-lr * grad_w[1]:+.3f}）")
+
+# 用 PyTorch 的自動微分驗證
+wt = torch.tensor(w, dtype=torch.float64, requires_grad=True)
+(torch.relu((wt * torch.tensor(x)).sum() + b) - t).pow(2).backward()
+print("\n✅ PyTorch 自動算出來的梯度也一樣：", np.allclose(wt.grad.numpy(), grad_w))
+print(f"👉 體重的權重被推的幅度，是血鉀的 {abs(grad_w[0] / grad_w[1]):.1f} 倍：這就是「輸入大的變數，聲音比較大」。")
+''')
+code(r'''
+#@title 3-2　同樣的規則，連續更新 5 步：沒標準化 vs 標準化
+def run_steps(x, w, b, t, lr, steps=5):
+    x, w = np.array(x, float), np.array(w, float)
+    rows = []
+    for k in range(steps):
+        z = (w * x).sum() + b
+        y = max(z, 0.0)
+        loss = (y - t) ** 2
+        g = 2 * (y - t) * (1.0 if z > 0 else 0.0)
+        rows.append({"步": k, "z": round(z, 2), "y（ReLU 後）": round(y, 2), "loss": round(loss, 3),
+                     "w₁（體重）": round(w[0], 3), "w₂（血鉀）": round(w[1], 3), "梯度 w₁": round(g * x[0], 2) + 0.0})
+        w = w - lr * g * x
+        b = b - lr * g
+    return pd.DataFrame(rows)
+
+# 標準化：假設體重平均 65、標準差 10；血鉀平均 4.2、標準差 0.4 → 85 kg 變成 2.0，4.6 變成 1.0
+print("❌ 沒標準化：x ＝ [85, 4.6]，學習率 0.01")
+show(run_steps([85, 4.6], [0.1, 0.1], 0.0, 1.0, 0.01))
+print("✅ 標準化之後：x ＝ [2.0, 1.0]，同樣的學習率 0.01")
+show(run_steps([2.0, 1.0], [0.1, 0.1], 0.0, 1.0, 0.01))
+print("👉 沒標準化：第一步 w₁ 就被推到 −13 以下，z 變成很大的負數，ReLU 輸出 0、梯度也變 0 → 參數再也不動（神經元「死掉」）。")
+print("   標準化之後：同樣的學習率，loss 穩穩下降。")
+''')
+code(r'''
+#@title 3-3　標準化：把每個欄位拉到同一把尺上
 cols = ["age", "resting_bp", "chol", "max_hr", "oldpeak", "ca"]
 print("縮放之前，各欄位的『大小』差很多：")
 show(trainval_df[cols].describe().loc[["mean", "std", "min", "max"]].round(1), index=True)
@@ -224,7 +407,7 @@ md(r'''
 **🎓 老師備註**：預期 S0 約 70％（± 約 14，很不穩定）、S1 約 82％、S2 約 83％。看 loss 曲線：S0 下降慢又抖。S1 vs S2 的差距不大，可以說明「粗略縮放也能用，標準化是更標準、更穩的版本」。
 ''', teacher=True)
 code(r'''
-#@title 3-2　類別資料：整數編碼 vs One-hot（之後的實驗都使用標準化）
+#@title 3-4　類別資料：整數編碼 vs One-hot（之後的實驗都使用標準化）
 print("原始表格：類別是文字")
 show(trainval_df[["patient_id", "chest_pain", "thal"]].head(4))
 
@@ -264,7 +447,7 @@ md(r'''
 （這裡「驗證折」扮演的，就是「之後才會來考試的病人」。）
 ''')
 code(r'''
-#@title 3-3　⚠️ 洩漏：「先標準化全部資料、再切分」 vs 「只用訓練集的平均與標準差」
+#@title 3-5　⚠️ 洩漏：「先標準化全部資料、再切分」 vs 「只用訓練集的平均與標準差」
 d = add_male(trainval_df).reset_index(drop=True)
 y = (d["disease"] == "yes").astype(float).values
 X_leaky = make_prep("onehot", True).fit_transform(d).astype("float32")       # ❌ 平均/標準差用了全部資料，包含之後要拿來『考試』的人
@@ -297,7 +480,7 @@ md(r'''
 **為什麼洩漏會變準？** 300 個雜訊裡，總會有幾個「碰巧」和答案相關。用全部人的答案去挑，等於偷看考卷，挑出「碰巧對」的特徵；之後驗證時，這些特徵當然「碰巧」又對。
 ''')
 code(r'''
-#@title 3-4　（加碼，時間夠再跑）洩漏有多可怕？用「完全隨機」的資料看看
+#@title 3-6　（加碼，時間夠再跑）洩漏有多可怕？用「完全隨機」的資料看看
 rng = np.random.default_rng(0)
 n = len(trainval_df)
 X_noise = rng.normal(size=(n, 300)).astype("float32")      # 300 個純雜訊的「基因」
@@ -318,13 +501,13 @@ print(f"✅ 只用訓練資料挑特徵：準確率 {np.mean(proper_):.1%}　（
 print("\n👉 資料裡完全沒有訊號，洩漏卻讓模型看起來『有預測力』。基因體學、影像組學（特徵多、人數少）的論文最容易中招。")
 ''')
 code(r'''
-#@title 3-5　資料擴增：表格資料加雜訊
+#@title 3-7　資料擴增：表格資料加雜訊
 _ = cv_eval(trainval_df, "E. + noise augmentation (x3)", encode="onehot", scale="standard", augment=noise_augment(3, 0.1))
 print("\n👉 在這個小資料集上，擴增幾乎沒有幫助（差異在 ± 範圍內）。擴增不是萬靈丹，一樣要用驗證的方式檢查有沒有用。")
 print("   而且：只能擴增『訓練集』。如果驗證集也擴增，同一個病人的變形版本就會跨過兩邊，又是洩漏。")
 ''')
 code(r'''
-#@title 3-6　影像資料的擴增（純示範，不訓練）：哪些變形在醫學上合理？
+#@title 3-8　影像資料的擴增（純示範，不訓練）：哪些變形在醫學上合理？
 try:
     from skimage.data import shepp_logan_phantom
     from skimage.transform import resize, rotate
@@ -344,6 +527,7 @@ plt.tight_layout(); plt.show()
 print("左右翻轉之後，病灶跑到另一側。如果你的任務跟『哪一側』有關（例如左/右側中風），這種擴增會直接把標籤弄錯。")
 print("旋轉一點點、調亮度、加雜訊，通常合理（模擬病人擺位、不同掃描儀）。什麼擴增合理，要由懂臨床的人決定。")
 ''')
+fig('imbalance', '類別不平衡')
 md(r'''
 ### 先認識幾個詞：怎麼評量「抓病人」的能力？
 
@@ -368,7 +552,7 @@ md(r'''
 | **oversample**（過採樣） | 把「有病」的人**重複抽樣複製**，補到跟沒病的一樣多。只對**訓練集**做，驗證時不做 |
 ''')
 code(r'''
-#@title 3-7　資料不平衡：罕見疾病只占一小部分
+#@title 3-9　資料不平衡：罕見疾病只占一小部分
 pos = trainval_df[trainval_df["disease"] == "yes"]; neg = trainval_df[trainval_df["disease"] == "no"]
 n_pos = int(round(0.15 * len(neg) / 0.85))
 imb_df = pd.concat([neg, pos.sample(n_pos, random_state=1)]).sample(frac=1, random_state=1).reset_index(drop=True)
@@ -407,7 +591,7 @@ print("👉 『全部猜沒病』的準確率就有 85％，recall（有病的�
 print("   class weight、過採樣可以多抓到一些病人（recall 上升），代價通常是 precision 下降（誤報變多）。要選哪個，取決於漏診與誤報哪個代價更大。")
 ''')
 code(r'''
-#@title 3-8　總結：每一種前處理，到底值多少？
+#@title 3-10　總結：每一種前處理，到底值多少？
 res = pd.DataFrame(RESULTS)
 show(res.round(3))
 plt.figure(figsize=(10.5, 4.5)); plt.barh(res["label"][::-1], res["acc"][::-1], xerr=res["acc_sd"][::-1], color="#3182bd")
@@ -484,17 +668,44 @@ show(pd.DataFrame({"層": list(state.keys()), "形狀": [tuple(v.shape) for v in
 print(f"model.pt 是模型學到的『權重』：總共只有 {sum(v.numel() for v in state.values())} 個數字（這就是整個 AI）。")
 ''')
 code(r'''
-#@title 4-2　🔓 終於打開測試集（只能這一次！）
+#@title 4-2　🔓 打開鎖住的測試集（第一步：讀進來）
 test_locked = pd.read_csv(os.path.join(WORKDIR, "heart_test_locked.csv"))
 test_locked[ALL_NUMERIC] = test_locked[ALL_NUMERIC].astype(float)
+print(f"鎖了很久的測試集：{len(test_locked)} 位病人。單元 2 鎖起來之後，沒有人看過它，也沒拿它調整過任何東西。")
+print("它是「已經清理好」的資料（文字類別、原始數值，還沒標準化／one-hot）：")
+show(test_locked.head(8))
+''')
+code(r'''
+#@title 4-3　第二步：套用「訓練時記住的」前處理
 X_test = final_prep.transform(add_male(test_locked)).astype("float32")
 y_test = (test_locked["disease"] == "yes").astype("float32").values
+X_test_df = pd.DataFrame(X_test, columns=names)
+print("處理完的測試集（連續欄位已標準化、類別已展開成 0/1）：")
+show(X_test_df.head(8).round(2))
+i = 0
+print(f"\n對照第一位病人：膽固醇 {test_locked['chol'].iloc[i]:.0f} → "
+      f"({test_locked['chol'].iloc[i]:.0f} − {scaler.mean_[2]:.1f}) ÷ {scaler.scale_[2]:.1f} = {X_test_df['chol'].iloc[i]:.2f}　（用的是『訓練資料』的平均與標準差）")
+print(f"胸痛類型 {test_locked['chest_pain'].iloc[i]} → "
+      + ", ".join(f"{c}={X_test_df[c].iloc[i]:.0f}" for c in names if c.startswith("chest_pain")))
+''')
+code(r'''
+#@title 4-4　第三步：模型的推論結果
+p = predict_proba(final_model, X_test)
+result = pd.DataFrame({"patient_id": test_locked["patient_id"], "預測有病的機率": p.round(3),
+                       "預測": np.where(p >= 0.5, "yes", "no"), "實際": test_locked["disease"]})
+result["對不對"] = np.where(result["預測"] == result["實際"], "✅", "❌")
+print("前 12 位病人的推論結果：")
+show(result.head(12))
+
 res = evaluate(final_model, X_test, y_test)
-print(f"測試集（{len(y_test)} 位從沒被看過的病人）：accuracy {res['acc']:.1%}　recall {res['recall']:.1%}　precision {res['precision']:.1%}　AUC {res['auc']:.3f}")
+tn = int(((p < 0.5) & (y_test == 0)).sum()); fp = int(((p >= 0.5) & (y_test == 0)).sum())
+fn = int(((p < 0.5) & (y_test == 1)).sum()); tp = int(((p >= 0.5) & (y_test == 1)).sum())
+print(f"\n全部 {len(y_test)} 位：TP {tp}　FN {fn}　FP {fp}　TN {tn}")
+print(f"accuracy {res['acc']:.1%}　recall {res['recall']:.1%}　precision {res['precision']:.1%}　AUC {res['auc']:.3f}")
 print("\n👉 這才是對『新病人』的誠實成績。如果現在回頭調整模型再重測，測試集就變成另一份驗證集，失去意義。")
 ''')
 code(r'''
-#@title 4-3　一位新病人走進診間：原始表單 → 同樣的前處理 → 預測
+#@title 4-5　一位新病人走進診間：原始表單 → 同樣的前處理 → 預測
 new_patient = {            # 就像從不同系統匯出來的「原始表單」，有各種不整齊的寫法
     "patient_id": "NEW001", "age": "55", "sex": "Male", "chest_pain": "non-anginal",
     "resting_bp": "135 mmHg", "chol": "6.4", "fbs": "0", "rest_ecg": "0", "max_hr": "140",
@@ -513,7 +724,7 @@ print(f"清理後：sex={cleaned.sex[0]}, resting_bp={cleaned.resting_bp[0]:.0f}
 print(f"\n✅ 預測有冠心病的機率：{risk:.1%}")
 ''')
 code(r'''
-#@title 4-4　故意做錯：前處理跟訓練時不一致，會發生什麼事？
+#@title 4-6　故意做錯：前處理跟訓練時不一致，會發生什麼事？
 def no_unit_fix(d): d.loc[0, "chol"] = float(new_patient["chol"])   # 忘了把 mmol/L 換成 mg/dL（直接用 6.4）
 
 # 錯誤 A：跳過標準化（直接把原始數字餵進去）
@@ -545,10 +756,101 @@ except Exception as e:
 print("\n👉 最危險的是 A、B、C：程式不會報錯，只是預測默默變得不可靠；A 甚至會讓『高風險病人』看起來像『低風險』。")
 ''')
 md(r'''
+---
+## 單元 4 補充｜去識別化與隱私
+
+我們今天用的是**公開、已去識別**的資料集。但你們以後做研究，拿到的是**院內病人的資料**。
+下面先看：研究資料裡，**哪些東西可以認出病人**？
+''')
+fig('privacy', '研究資料裡藏著哪些可以認出病人的東西')
+md(r'''
+### ① 影像：臉部可以被重建
+頭部 **MRI／CT** 是 3D 的，把表面重建出來就是一張臉，已有研究證明可以用人臉辨識軟體比對到真人（例如 Schwarz 等人，*NEJM* 2019）。
+所以影像研究常要做「**去臉（defacing）**」，或只提供去除顱骨與臉部的腦組織。
+
+### ② DICOM 標頭：影像檔「自己帶著」病人資料
+醫學影像（DICOM）檔案除了像素，還有一大段**標頭（header）**。下面是一個**虛構**的範例：
+''')
+code(r'''
+#@title 4-7　DICOM 標頭長什麼樣子？（範例；病人與資料皆為虛構）
+header = [
+    # (tag, 名稱, 原始值, 風險, 處理方式, 去識別化後)
+    ("(0010,0010)", "PatientName", "CHEN^DAWEN", "直接識別", "取代", "ANON-0042"),
+    ("(0010,0020)", "PatientID（病歷號）", "A123456789", "直接識別", "取代（對照表另外保管）", "ANON-0042"),
+    ("(0010,0030)", "PatientBirthDate", "19680312", "直接識別", "只留年份", "1968"),
+    ("(0010,1040)", "PatientAddress", "台北市中正區某某路 1 號", "直接識別", "刪除", "（空）"),
+    ("(0010,2154)", "PatientTelephoneNumbers", "0912-345-678", "直接識別", "刪除", "（空）"),
+    ("(0008,0050)", "AccessionNumber", "H2025110400123", "直接識別", "刪除", "（空）"),
+    ("(0008,0090)", "ReferringPhysicianName", "WANG^XIAOMING", "直接識別", "刪除", "（空）"),
+    ("(0008,1070)", "OperatorsName", "LI^TECH", "直接識別", "刪除", "（空）"),
+    ("(0010,0040)", "PatientSex", "M", "間接識別", "保留（研究需要）", "M"),
+    ("(0010,1010)", "PatientAge", "057Y", "間接識別", "保留或分組", "050-059Y"),
+    ("(0008,0020)", "StudyDate", "20251104", "間接識別", "日期位移（同一病人位移相同天數）", "20250918"),
+    ("(0008,0030)", "StudyTime", "093015", "間接識別", "刪除", "（空）"),
+    ("(0008,0080)", "InstitutionName", "Example General Hospital", "間接識別", "刪除", "（空）"),
+    ("(0018,1000)", "DeviceSerialNumber", "SN-483920", "間接識別", "刪除", "（空）"),
+    ("(0008,1030)", "StudyDescription", "MRI BRAIN, r/o stroke", "間接識別", "保留，但要檢查有沒有夾帶姓名", "MRI BRAIN, r/o stroke"),
+    ("(0020,000D)", "StudyInstanceUID", "1.2.840.113619.2.55.3.60468…", "間接識別", "重新產生（對照表另外保管）", "2.25.3175…（新的）"),
+    ("(0008,0060)", "Modality", "MR", "不需處理", "保留", "MR"),
+    ("(0018,0050)", "SliceThickness", "1.0", "不需處理", "保留", "1.0"),
+    ("(0028,0030)", "PixelSpacing", "0.5\\0.5", "不需處理", "保留", "0.5\\0.5"),
+]
+dicom = pd.DataFrame(header, columns=["Tag", "名稱", "原始值", "風險", "處理方式", "去識別化後"])
+print("19 個標頭欄位（節錄）。風險：直接識別 ＝ 一看就知道是誰；間接識別 ＝ 湊在一起可能認出人。")
+show(dicom)
+print("⚠️ 還有一個陷阱：像素本身可能「燒」進了文字（例如超音波影像上的病人姓名），只改標頭不夠，要另外檢查影像內容。")
+print("DICOM 標準有制式的去識別化設定檔（PS3.15 附錄 E：Basic Application Level Confidentiality Profile），可以當作清單參考。")
+''')
+md(r'''
+### ③ 病歷文字：姓名、日期、號碼
+''')
+code(r'''
+#@title 4-8　病歷文字的去識別化：用規則把姓名、日期、號碼拿掉（範例；內容為虛構）
+import re
+note = ("2025/11/04 門診。病人陳大文（病歷號 12345678，身分證 A123456789，手機 0912-345-678），57 歲男性，"
+        "住台北市中正區某某路1號。主訴左側肢體無力 2 小時，由女兒陳小美陪同就醫。2025-11-04 09:30 頭部 MRI 顯示右側 MCA 梗塞。"
+        "預計 2025年11月18日 回診，由王小明醫師追蹤。")
+names_in_note = ["陳大文", "陳小美", "王小明"]            # 示範用：真實情況要靠名單或自然語言處理（NER）找人名
+rules = [(r"[A-Z][12]\d{8}", "[身分證]"), (r"09\d{2}-?\d{3}-?\d{3}", "[電話]"), (r"病歷號\s*\d{6,8}", "病歷號 [病歷號]"),
+         (r"\d{4}[/-]\d{1,2}[/-]\d{1,2}(\s*\d{1,2}:\d{2})?", "[日期]"), (r"\d{4}年\d{1,2}月\d{1,2}日", "[日期]"),
+         (r"(台北|新北|桃園|台中|台南|高雄)市[^，。\s]*\d+號", "[地址]")]
+clean_note, hits = note, {}
+for pat, tag in rules:
+    clean_note, n = re.subn(pat, tag, clean_note)
+    hits[tag] = hits.get(tag, 0) + n
+for nm in names_in_note:
+    clean_note = clean_note.replace(nm, "[姓名]"); hits["[姓名]"] = hits.get("[姓名]", 0) + note.count(nm)
+print("【原文】\n" + note + "\n")
+print("【去識別化之後】\n" + clean_note + "\n")
+show(pd.DataFrame({"取代成": list(hits), "次數": list(hits.values())}))
+print("規則做不到的事：沒列在名單上的人名、「某某的女兒」這類關係、手寫或口語的日期寫法…")
+print("更難的是「間接識別」：57 歲 ＋ 左側無力 ＋ 某區居民，湊在一起，罕見的話還是可能認出人。所以去識別化之後仍然要人工抽查。")
+''')
+md(r'''
+### 台灣的相關規範
+> 以下是教學用的**重點整理**（資料查詢日期：2026-11-04），**不是法律意見**。實際做研究時，請以全國法規資料庫的現行條文，以及你所屬醫院 **IRB** 的規定為準。
+
+| 規範 | 與我們的研究資料有關的重點 |
+|---|---|
+| **個人資料保護法 第 6 條** | **病歷、醫療、基因、性生活、健康檢查、犯罪前科**屬「特種個資」，原則上**不得蒐集、處理或利用**。例外包括：① **公務機關或學術研究機構**基於醫療、衛生或犯罪預防的目的，為統計或學術研究而有必要，且資料經提供者處理後，或依蒐集者的揭露方式，**無從識別特定當事人**；② **經當事人書面同意**（有但書限制）；另外還有法律明文規定、法定職務或義務等例外。 |
+| **人體研究法 第 5 條** ＋ 衛福部公告 | 人體研究原則上，**研究前要先擬計畫，經倫理審查委員會（IRB）審查通過**；屬衛福部公告「得免審查」範圍的，才不在此限。 |
+| **衛福部公告：得免倫理審查委員會審查之人體研究案件範圍**（101.7.5 衛署醫字第 1010265075 號） | 免審有**嚴格前提**：研究對象不能是未成年人、收容人、原住民、孕婦、身心障礙、精神病患或其他可能無法自由決定者；範圍包含「非記名、非互動、非介入性且**無從辨識特定個人**」的研究，以及風險極低、經 IRB 評估後核發免審證明者。**要不要免審，是由 IRB 判定，不是研究者自己決定。** |
+| **衛福部公告：得免取得研究對象同意之人體研究案件範圍**（101.7.5 衛署醫字第 1010265083 號） | 包含「自**合法生物資料庫**取得之**去連結或無法辨識特定個人**的資料、檔案、文件、資訊或檢體進行研究」，但**不包括涉及族群或群體利益者**。 |
+| **衛福部函釋**（衛部醫字第 1030013183 號） | 對於未成年人、收容人、原住民、孕婦、身心障礙、精神病患等族群的資料，**無論是否去連結**，都**不屬於**免審範圍；另外，針對檢體，「去連結」不等於可以轉作原始目的以外的用途。 |
+| **「去連結」與「去識別化」** | **去連結**：以匿名化等方式，讓資料**永久無法**以合理方式連結、比對出當事人；**去識別化**：資料經處理後，無從識別特定當事人。**只要還能連結回個人，就仍然是「可識別」**——把姓名換成代號、但自己手上保留對照表，通常還不算去連結。 |
+
+**給未來研究者的三個實務提醒**
+1. **先問你的 IRB**：這個研究是免審、簡易審查，還是一般審查？不要自己判斷。
+2. **不要把含個資的資料貼到公開的 AI 服務**（包括聊天機器人），哪怕只是「幫我看一下這段病歷」。
+3. 今天的資料集是**公開、已去識別**的；用**院內資料**做研究時，上面每一項都要處理。
+
+資料來源：[個資法第 6 條（個人資料保護委員會籌備處）](https://www.pdpc.gov.tw/News_Content/100/293/)、[衛福部：得免倫理審查委員會審查之人體研究案件範圍](https://dep.mohw.gov.tw/DOMA/dl-16078-31bb0e95-2407-4323-9bbf-a62b7f8dcee3.html)、[臺北醫學大學轉知：衛福部函釋去連結檢體使用規範及免審範圍](https://ohr.tmu.edu.tw/index.php/zh-Hant/news/133)、[全國法規資料庫（人體研究法）](https://law.moj.gov.tw/)。
+''')
+md(r'''
 ### 收尾：把今天帶走
 
 **資料不只是數字，它還有來源與隱私**
-- **去識別化**：病歷文字裡的姓名、日期、病歷號；DICOM 影像標頭裡的個資；腦部 MRI 重建後有可能認出人臉。研究前要經 IRB，並依個資法處理。
+- **去識別化**：影像臉部、DICOM 標頭、病歷文字（上一節）。研究前要經 IRB，並依個資法處理。
 - **偏誤**：資料若只來自某一家醫院、某一族群，模型在別的地方可能就不準。跨院、跨儀器的外部驗證很重要。
 - **標籤品質**：不同醫師對同一份 EEG 判讀不一致時，AI 學到的是「誰的標準」？
 

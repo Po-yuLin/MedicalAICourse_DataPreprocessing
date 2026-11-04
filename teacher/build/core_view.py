@@ -2,7 +2,9 @@
 import html as _html
 from IPython.display import display, HTML
 if "FONT_PX" not in globals():
-    FONT_PX = 20
+    FONT_PX = 16
+if "TABLE_MAX_PX" not in globals():
+    TABLE_MAX_PX = 1100        # 不在 Colab 時使用的預設寬度（Colab 內會自動偵測瀏覽器視窗寬度）
 _builtin_print = print
 
 
@@ -33,8 +35,24 @@ def _fmt(v):
     return ("␣" * lead + s.strip() + "␣" * trail) if (lead or trail) else s
 
 
+def _avail_px():
+    """目前瀏覽器視窗可用寬度（CSS 像素）。瀏覽器放大到 150% 時，這個數字會變小，表格就會跟著縮小去配合。"""
+    if globals().get("IN_COLAB"):
+        try:
+            from google.colab import output
+            return max(500, int(output.eval_js("document.documentElement.clientWidth")) - 150)
+        except Exception:
+            pass
+    return TABLE_MAX_PX
+
+
+def _text_em(s):
+    return sum(1.05 if ord(ch) > 0x2E80 else 0.68 for ch in s)
+
+
 def show(df, styler=None, index=False):
-    """用大字顯示表格（字體大小由 FONT_PX 決定）。␣＝多餘的空格，⟨空白⟩＝空的格子。"""
+    """顯示表格：字體最大 FONT_PX，但如果表格太寬，會自動縮小字體，讓整張表剛好放進視窗。
+    ␣＝多餘的空格，⟨空白⟩＝空的格子。"""
     st = styler if styler is not None else df.style
     st = st.format(_fmt)
     if not index:
@@ -42,13 +60,23 @@ def show(df, styler=None, index=False):
             st = st.hide(axis="index")
         except Exception:
             st = st.hide_index()
-    px = FONT_PX
+    # 估計整張表需要的寬度，決定字體大小
+    cols = ([("" if df.index.name is None else str(df.index.name))] if index else []) + [str(c) for c in df.columns]
+    widths = [_text_em(c) for c in cols]
+    for j, c in enumerate(df.columns):
+        k = j + (1 if index else 0)
+        widths[k] = max([widths[k]] + [_text_em(_fmt(x)) for x in df[c].tolist()])
+    if index:
+        widths[0] = max([widths[0]] + [_text_em(str(x)) for x in df.index.tolist()])
+    pad = 8                                                  # 每格左右內距（px，單邊）
+    fit = 0.97 * (_avail_px() - 2 * pad * len(cols) - 8) / max(sum(widths), 1)
+    px = max(10.0, min(float(FONT_PX), fit))
     st = st.set_table_styles([
-        {"selector": "th", "props": [("font-size", f"{px}px"), ("padding", "6px 12px"), ("text-align", "left"),
+        {"selector": "th", "props": [("font-size", f"{px:.1f}px"), ("padding", f"5px {pad}px"), ("text-align", "left"),
                                      ("background-color", "#e8eaf6"), ("color", "#000")]},
-        {"selector": "td", "props": [("font-size", f"{px}px"), ("padding", "6px 12px"),
+        {"selector": "td", "props": [("font-size", f"{px:.1f}px"), ("padding", f"5px {pad}px"),
                                      ("background-color", "#fff"), ("color", "#000")]}])
-    display(st)
+    display(HTML('<div style="max-width:100%;overflow-x:auto">' + st.to_html() + "</div>"))
 
 
 def _legend(items):

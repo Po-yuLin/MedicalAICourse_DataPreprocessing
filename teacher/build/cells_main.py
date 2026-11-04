@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # 每個 cell 是 (type, source, flags)。flags: form=收合的程式格、teacher=只在老師版出現
 CELLS = []
+def fig(name, title): CELLS.append(("code", f"#@title 圖｜{title}\nshow_fig('{name}')", dict(form=True, teacher=False, fig=name)))
+def slide_cell(name, title): CELLS.append(("code", f"#@title 投影片｜{title}\nfrom IPython.display import HTML, display\ndisplay(HTML('<img src=\"https://raw.githubusercontent.com/Po-yuLin/MedicalAICourse_DataPreprocessing/main/slides/{name}\" style=\"width:100%;max-width:1100px;height:auto\">'))", dict(form=True, teacher=False, slide=name)))
 def md(s, teacher=False): CELLS.append(("md", s.strip("\n"), dict(teacher=teacher)))
 def code(s, form=False, teacher=False): CELLS.append(("code", s.strip("\n"), dict(form=form, teacher=teacher)))
 
@@ -26,15 +28,18 @@ md(r'''
 本 notebook 裡的「錯誤」是老師**刻意製造**的，用於教學；模型僅供學習，**不可用於臨床**。
 ''')
 
+slide_cell('intro.png', '自我介紹')
+
 # ============================== 單元 0 ==============================
 md('## 單元 0｜準備環境')
 code(r'''
 #@title 0-1　準備環境（會跳出 Google Drive 授權視窗，請按「允許」）
-FONT_PX = 20       # 👈 投影用的字體大小（表格與文字輸出）。想再大就改這個數字（例如 26），再重新執行
+FONT_PX = 16       # 👈 表格與文字輸出的字體大小。建議：瀏覽器放大到 150%，這裡維持 16；表格太寬時會自動縮小配合視窗
 import os, sys, io, json, time, base64, zlib, warnings, urllib.request
 import numpy as np, pandas as pd
 warnings.filterwarnings("ignore")
 
+REPO = "Po-yuLin/MedicalAICourse_DataPreprocessing"      # 本課程的 GitHub repo
 IN_COLAB = "google.colab" in sys.modules
 if IN_COLAB:
     from google.colab import drive
@@ -53,6 +58,7 @@ import matplotlib.pyplot as plt
 torch.set_num_threads(2)
 __CORE_CLEAN__
 __CORE_VIEW__
+__CORE_FIGS__
 __CORE_ML__
 __CORE_PREP__
 print("✅ 工具箱就緒（PyTorch", torch.__version__ + "）")
@@ -63,7 +69,6 @@ _EMBEDDED = __EMBEDDED__      # 備援資料（壓縮後的文字），網路或
 _TRUTH = __TRUTH__            # 檢查清理結果時用的「標準答案」（只有檢查器會用到）
 BANDS = __BANDS__             # 各欄位「合理範圍」（缺值要補的值，落在這裡面都算合理）
 
-REPO = "Po-yuLin/MedicalAICourse_DataPreprocessing"
 BASE_URLS = [f"https://raw.githubusercontent.com/{REPO}/v1.0/data/",      # 先試固定版本（tag）
              f"https://raw.githubusercontent.com/{REPO}/main/data/"]       # 再試 main 分支
 
@@ -96,7 +101,22 @@ md(r'''
 ---
 ## 單元 1｜資料如何才能「餵進去」
 
-AI 模型只吃**數字**。每一位病人是一列，每一欄是一個**特徵（feature）**，我們想預測的答案是**標籤（label）**：這裡是 `disease`（有沒有冠心病）。
+AI 模型只吃**數字**。先認識兩個名詞：
+''')
+fig('features_labels', '什麼是特徵與標籤')
+md(r'''
+**特徵（feature）**是我們「給模型看」的資料（一欄一個）；**標籤（label）**是我們希望它「預測」的答案。這裡的標籤是 `disease`（有沒有冠心病）。
+
+那麼，**為什麼電腦會拒絕吃髒資料？**
+''')
+fig('why_dirty', '為什麼電腦拒絕吃髒資料')
+md(r'''
+除了「轉不成數字」，還有一種最常見的資料問題：**缺值**。遇到缺值，第一個問題不是「怎麼補」，而是：**為什麼缺？**
+''')
+fig('missing', '為什麼缺？怎麼處理？')
+md(r'''
+**處理缺值的三個概念**：**刪除**（拿掉整列或整欄）、**填補**（用中位數、眾數等補上）、**標記**（多加一欄「是否缺值」）。
+今天的練習會用到「刪除」與「填補」。
 
 ### 資料字典
 
@@ -302,6 +322,7 @@ df_student = read_student_table()
 print(f"讀到 {len(df_student)} 列（原本 {len(df_dirty_small)} 列）")
 all_ok = check_cleaned(df_student, hint=HINT, dirty=df_dirty_small, truth=df_truth_small, bands=BANDS)
 ''')
+fig('tiny_net', '我們的超小神經網路長什麼樣')
 code(r'''
 #@title 1-8　用你清好的資料，訓練一個超小的神經網路（輸入 → 3 個感知器 → 1 個感知器，共 4 個）
 def train_on_table(df, epochs=300):
