@@ -1,67 +1,109 @@
 # 醫學 AI 課程：資料前處理基礎（兩小時工作坊）
 
-給**零程式背景的醫學生**。學生不寫程式，只執行 cell 並完成「👉 你的任務」。
-資料集：UCI Heart Disease（Cleveland），303 位病人、13 個特徵。模型：PyTorch，**4 個感知器**（3 → 1）的超小神經網路。
+給**零程式背景的醫學生**的 AI 資料前處理入門課。學生不需要寫程式，只要在 Google Colab 執行 cell，並完成標示「👉 你的任務」的動手練習。
 
-## 開啟（學生）
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Po-yuLin/MedicalAICourse_DataPreprocessing/blob/main/notebooks/AI_preprocessing_student.ipynb)
+資料集是公開的 UCI Heart Disease（Cleveland），303 位病人；模型是用 PyTorch 寫的、只有 **4 個感知器**（輸入 → 3 → 1）的超小神經網路。課程的重點不是模型，而是讓學生親眼看到：**資料怎麼處理，會直接決定 AI 學到什麼、你能不能相信它**。
 
-點開後，請先 **檔案 → 在雲端硬碟中儲存副本**，再從副本開始執行。
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Po-yuLin/MedicalAICourse_DataPreprocessing/blob/main/notebooks/AI_preprocessing_student.ipynb)　← 學生版（開啟後請先「檔案 → 在雲端硬碟中儲存副本」）
 
-老師版（含答案與老師備註、「完美學生」捷徑）：
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Po-yuLin/MedicalAICourse_DataPreprocessing/blob/main/notebooks/AI_preprocessing_teacher.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Po-yuLin/MedicalAICourse_DataPreprocessing/blob/main/notebooks/AI_preprocessing_teacher.ipynb)　← 老師版（含答案、老師備註、「完美學生」捷徑）
+
+---
+
+## 關於這個專案的製作方式（AI 使用聲明）
+
+**本專案的所有內容，是由 Claude（Anthropic 開發的 AI 助理）實際動手完成的**，包括：
+
+- 兩份 Jupyter notebook（學生版與老師版）、清理結果檢查器、小型神經網路與前處理管線
+- 「髒資料」的產生器與答案檔
+- notebook 內所有教學示意圖（SVG）
+- 教學投影片（`.pptx`）的產生與排版
+- 本 README
+
+**作者林伯昱（成大醫院神經部／基因醫學部）只負責提出課程設計與需求，並在多輪對話中給予修改意見與課堂回饋**，沒有自行撰寫程式。投影片的標題頁與自我介紹頁是作者原有的內容。
+
+因此請特別留意：
+
+- 內容由 AI 產生，**可能含有錯誤**；課堂上出現的實驗數字也需要在你的環境重新確認。
+- 「台灣相關規範」的部分是教學用的整理，**不是法律意見**（見下方說明）。
+
+---
 
 ## 課程結構
-| 單元 | 內容 | 重點 |
-|---|---|---|
-| 1 | 資料如何才能「餵進去」 | 手動清理 40 列（Google 試算表）→ 檢查器 → 程式自動清理全部 |
-| 2 | 資料怎麼分配 | 隨機切分的波動、train/val/test、K-fold、**病人層級洩漏** |
-| 3 | 前處理如何影響訓練 | 標準化、one-hot、特徵選擇洩漏（加碼）、擴增、不平衡 |
-| 4 | 推論 | 存下前處理＋模型、鎖住的測試集、新病人、故意做錯 |
 
-## 上課前（老師）
-1. 把整個資料夾 push 到本 repo（`main` 分支）。
-2. **建立 tag `v1.0`**（notebook 優先從 `.../v1.0/data/` 讀資料）：
+| 單元 | 內容 | 學生會看到什麼 |
+|---|---|---|
+| 0 | 準備環境 | 授權 Google 雲端硬碟，載入資料 |
+| 1 | 資料如何才能「餵進去」 | 特徵與標籤、缺值、髒資料讓模型壞掉；手動清理 vs 程式清理；超小神經網路 |
+| 2 | 資料怎麼分配 | 隨機種子、訓練／驗證／測試、stratify、K 折／留一法／留一病人法、**資料洩漏** |
+| 3 | 前處理如何影響訓練 | 標準化（含一個感知器的連鎖律手算）、one-hot、擴增、資料不平衡 |
+| 4 | 推論 | 前處理要和模型一起存、鎖住的測試集、新病人、故意做錯的示範 |
+| 4 補充 | 去識別化與隱私 | 影像臉部、DICOM 標頭範例、病歷文字、台灣相關規範 |
+
+教學上的幾個設計：
+
+- **人工注入、可驗證的錯誤**：小資料集（40 位病人）裡有 6 類錯誤（缺值、不可能值、單位不一致、數字欄位混入文字、類別寫法不一、重複列），並保留兩個「看起來誇張但是真的」的極端值當陷阱題。
+- **答案感知的檢查器**：會檢查有問題的格子修好了沒、**沒問題的格子有沒有被改壞**、有固定答案的格子答案對不對；缺值與離譜值則只要填「合理」的值。`HINT` 1–4 逐級給提示。
+- **誠實呈現結果**：例如擴增在這份小資料上幾乎沒有幫助、one-hot 對整數編碼的差距在雜訊範圍內，notebook 都照實寫，並用 5 折交叉驗證報告「平均 ± 標準差」。
+
+## 資料集與授權
+
+- **資料**：Detrano R. et al. *International application of a new probability algorithm for the diagnosis of coronary artery disease.* Am J Cardiol 1989;64:304–310。UCI Machine Learning Repository，**CC BY 4.0**；本專案使用 ISLR 整理版（James et al.）。重新散布請保留這個出處。
+- **`data/` 裡的「錯誤」是人為注入的**，僅供教學；模型僅供學習，**不可用於臨床**。
+- **程式碼**採用本 repo 的 **GPL-3.0** 授權。
+- **投影片**內含作者的個人照片與自我介紹頁，這些內容的著作權屬於作者，不包含在上述授權之內。
+
+## 資料夾
+
+```
+notebooks/   學生版、老師版 .ipynb（由 teacher/build 產生，請不要直接手改）
+data/        heart_dirty_small.csv（40 位練習用）、heart_dirty_full.csv（303 位＋重複列）
+slides/      教學投影片（.pptx），以及 notebook 會讀取的投影片圖片（intro.png、title.png、qr_github.png）
+teacher/     answer_key_*.csv（注入錯誤的完整答案）、heart_clean_original.csv（乾淨原始資料）、
+             make_dirty_data.py（重新產生髒資料，固定 seed）、build/（重新產生 notebook 的原始碼）
+```
+
+> `teacher/` 內有答案。
+
+## 給想使用這份教材的老師
+
+### 上課前
+1. 把整個資料夾放到你自己的 GitHub repo，並把 notebook 內的 `REPO` 與連結換成你的 repo。
+2. **建立 tag `v1.0`**（notebook 優先讀 `.../v1.0/data/`，其次讀 `main`，最後才用內嵌的備援資料，並會在輸出中明確標示）：
    ```bash
    git tag v1.0 && git push origin v1.0
    ```
-   讀取順序：先試 `v1.0` tag → 再試 `main` → 最後才用 notebook 內嵌的備援資料（會在輸出明確標示「內嵌備援」）。所以沒有 tag 也不會壞。
-3. **務必用學生會用的學校帳號，在真實 Colab 上完整跑一次**，特別是 Google 試算表授權（`gspread`）。若學校帳號限制了 Sheets 授權，把 1-3 的 `MODE` 改成 `"csv"`（下載→編輯→上傳）。
-4. 請學生**課前**先開 notebook、跑完 0-1（Drive 授權），40 人同時授權很容易卡住。
+3. **用學生會用的帳號，在真實 Colab 完整跑一次**。若學校的 Google 帳號限制 Sheets 授權，把 notebook 中 1-6 的 `MODE` 改成 `"csv"`（下載 → 編輯 → 上傳）。
+4. 請學生**課前**先開好 notebook、跑完第一格（Drive 授權）；多人同時授權很容易卡住。
 
-## 投影與字體大小
-- 建議**把瀏覽器放大到 150%**（`Ctrl` ＋ `+`）來放大所有文字；Colab 的「工具 → 設定 → 編輯器」可放大程式碼字體。
-- **表格會自動縮小去配合視窗寬度**（Colab 內會偵測目前的瀏覽器寬度），所以放大到 150% 也不會超出螢幕。換了縮放比例後，重新執行該格即可。
-- notebook 第一格的 `FONT_PX = 16` 是表格與文字輸出的**最大**字體；想更大就調高。
-- 圖表是 SVG（跟著視窗寬度縮放）；Markdown 裡的表格是 17px 的 HTML 表格（想改大小：`teacher/build/build_nb.py` 的 `MD_TABLE_PX`）。
+### 投影與字體
+- 建議**把瀏覽器放大到 150%**（`Ctrl` ＋ `+`）；Colab 內的表格會偵測視窗寬度，自動縮小去配合，換了縮放比例後重新執行該格即可。
+- 第一格的 `FONT_PX = 16` 是表格與文字輸出的最大字體。
+- Markdown 說明文字與程式碼的字體 notebook 無法放大，請用瀏覽器縮放，或到 Colab「工具 → 設定 → 編輯器」調整程式碼字體。
 
-## 投影片與圖
-- `slides/qr_github.png` 是指向本 repo 的 QR code（可以直接貼進 PPT）；notebook 開頭自我介紹之後也有一張 QR code 卡片（內嵌，不需要網路）。
-- `slides/intro.png`（自我介紹）、`slides/title.png`（標題頁）是從 `人工智慧的資料前處理基礎.pptx` 匯出的圖片；notebook 開頭的「投影片｜自我介紹」直接讀 GitHub 上的這張圖。**要換圖：把新圖用同樣的檔名放進 `slides/` 即可，不用動 notebook。**
-- 想再加投影片：把圖片放進 `slides/`，在 `teacher/build/cells_main*.py` 加一行 `slide_cell('檔名.png', '標題')`，重新建置。
-- 其他教學圖（特徵與標籤、缺值、神經網路、洩漏三種、標準化、K 折／LOO／LOPO、不平衡、隱私）是用程式畫的 SVG（`teacher/build/core_figs.py`），已預先放好輸出，打開 notebook 就看得到，不用先執行。
+### 投影片與 QR code
+- `slides/` 裡的圖片是 notebook 開頭直接從 GitHub 讀取的；要換圖，用同樣的檔名取代即可，不必動 notebook。
+- notebook 開頭有一張內嵌的 QR code 卡片，指向本 repo 頁面。
 
-## 檢查器怎麼判斷學生清得對不對
-檢查器內嵌了 40 位病人的「標準答案」與各欄位的「合理範圍」（p1–p99），所以會分辨三種格子：
-1. **本來就正常的格子**：必須維持原樣，改掉就報「不該改的被改了」（包含兩個真實極端值：P153 的 chol 564、P092 的 oldpeak 6.2）。
-2. **有固定答案的格子**（拼字、單位換算、去掉 mmHg）：必須與答案一致（膽固醇單位換算容許 ±2 mg/dL）。
-3. **缺值與不可能的值**（沒有唯一答案）：填任何落在合理範圍內的值都算對。
-刪掉**本來就有問題**的病人是允許的；刪掉**本來完全正常**的病人會被抓到。`HINT` 1–4 逐級給提示，4 直接給答案。
-
-## 資料夾
+### 修改課程內容
+編輯 `teacher/build/cells_main.py`、`cells_main2.py`（cell 內容）、`core_*.py`（工具函式）或 `core_figs.py`（示意圖），再執行：
+```bash
+python teacher/build/build_nb.py
 ```
-notebooks/   學生版、老師版 .ipynb（由 teacher/build 產生，請勿直接手改）
-slides/      投影片圖片（自我介紹、標題）
-data/        heart_dirty_small.csv（40 位練習用）、heart_dirty_full.csv（303 位＋重複列）
-teacher/     answer_key_*.csv（注入錯誤的完整答案）、heart_clean_original.csv（乾淨原始資料）、
-             make_dirty_data.py（重新產生髒資料；固定 seed）、build/（重新產生 notebook）
-```
-> `teacher/` 內有答案。若擔心學生翻到，可把它移到私有 repo。
+重新產生兩份 notebook。
 
-## 資料來源與授權
-- 資料：Detrano R. et al. *International application of a new probability algorithm for the diagnosis of coronary artery disease.* Am J Cardiol 1989;64:304–310。UCI Machine Learning Repository，**CC BY 4.0**；本專案使用 ISLR 整理版（James et al.）。
-- `data/` 中的「錯誤」是**人為注入**的，僅供教學；模型不可用於臨床。
-- 程式碼採本 repo 的 GPL-3.0 授權；資料請依 CC BY 4.0 保留上述出處。
+## 環境與已知限制
 
-## 修改課程內容
-編輯 `teacher/build/cells_main.py`、`cells_main2.py`（cell 內容）或 `core_*.py`（工具函式），執行 `python teacher/build/build_nb.py` 重新產生兩份 notebook。
+- 設計給 **Google Colab**（PyTorch、scikit-learn、pandas、matplotlib、scikit-image 皆為 Colab 預設環境）。本機測試使用 CPU 版 PyTorch 2.14、scikit-learn 1.9、pandas 3.1；Colab 的版本不同，數字可能略有出入。
+- 小網路與小資料集下，實驗結果會有隨機波動；課程文字與投影片中的數字是作者環境下的實測值，請以現場為準。
+- 圖表標籤、說明文字為繁體中文；notebook 內的 matplotlib 圖為英文標籤（Colab 預設字型沒有中文）。
+
+## 關於「台灣相關規範」的說明
+
+「單元 4 補充」中整理了個人資料保護法第 6 條、人體研究法第 5 條、衛福部關於免審與免取得同意的公告與函釋、「去連結」與「去識別化」的概念。這些是**教學用的重點整理**（資料查詢日期：2026-11-04），**不是法律意見**，也可能已隨法規修正而過時。實際做研究時，請以[全國法規資料庫](https://law.moj.gov.tw/)的現行條文，以及你所屬醫院 **IRB** 的規定為準。
+
+主要資料來源：個人資料保護委員會籌備處（個資法第 6 條）、衛福部公告（得免倫理審查委員會審查之人體研究案件範圍；得免取得研究對象同意之人體研究案件範圍）、全國法規資料庫（人體研究法）。
+
+## 引用與回饋
+
+如果你使用或改作這份教材，請保留資料集出處（見上），並建議標註本專案由 Claude 協助製作。發現錯誤或有改進建議，歡迎開 Issue。
