@@ -8,6 +8,11 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Po-yuLin/MedicalAICourse_DataPreprocessing/blob/main/notebooks/AI_preprocessing_teacher.ipynb)　← 老師版（含答案、老師備註、「完美學生」捷徑）
 
+### 🎥 課程錄影
+
+[![課程錄影（YouTube）](https://img.youtube.com/vi/yme_3eB_Ya4/hqdefault.jpg)](https://youtu.be/yme_3eB_Ya4)
+
+點圖片或[這個連結](https://youtu.be/yme_3eB_Ya4)觀看完整的兩小時課程錄影，可以搭配上面的 notebook 一起操作。
 ---
 
 ## 關於這個專案的製作方式（AI 使用聲明）
